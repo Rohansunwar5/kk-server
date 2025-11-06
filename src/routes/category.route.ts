@@ -7,7 +7,6 @@ import {
   updateCategory,
   deleteCategory,
   hardDeleteCategory,
-  mapProductsToCategories,
   addProductToCategory,
   removeProductFromCategory,
 } from '../controllers/category.controller';
@@ -20,19 +19,19 @@ categoryRouter.get('/', asyncHandler(getAllCategories));
 categoryRouter.get('/:id', asyncHandler(getCategoryById));
 
 // Admin routes - Category management
-categoryRouter.post('/',isAdminLoggedIn,asyncHandler(createCategory));
+categoryRouter.post('/',asyncHandler(createCategory));
 
-categoryRouter.put('/:categoryId',isAdminLoggedIn,asyncHandler(updateCategory));
+categoryRouter.put('/:categoryId',asyncHandler(updateCategory));
 
-categoryRouter.delete('/:categoryId',isAdminLoggedIn,asyncHandler(deleteCategory));
+categoryRouter.delete('/:categoryId',asyncHandler(deleteCategory));
 
-categoryRouter.delete('/:categoryId/hard',isAdminLoggedIn,asyncHandler(hardDeleteCategory));
+categoryRouter.delete('/:categoryId/hard',asyncHandler(hardDeleteCategory));
 
 // Admin routes - Product mapping
-categoryRouter.post('/map-products',isAdminLoggedIn,asyncHandler(mapProductsToCategories));
+// categoryRouter.post('/map-products',isAdminLoggedIn,asyncHandler(mapProductsToCategories));
 
-categoryRouter.post('/:categoryId/products',isAdminLoggedIn,asyncHandler(addProductToCategory));
+categoryRouter.post('/:categoryId/products', asyncHandler(addProductToCategory));
 
-categoryRouter.delete('/:categoryId/products/:productId',isAdminLoggedIn,asyncHandler(removeProductFromCategory));
+categoryRouter.delete('/:categoryId/products/:productId', asyncHandler(removeProductFromCategory));
 
 export default categoryRouter;

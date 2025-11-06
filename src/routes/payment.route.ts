@@ -1,6 +1,7 @@
-import { Router } from "express";
-import isLoggedIn from "../middlewares/isLoggedIn.middleware";
-import { asyncHandler } from "../utils/asynchandler";
+import { Router } from 'express';
+import { asyncHandler } from '../utils/asynchandler';
+import isLoggedIn from '../middlewares/isLoggedIn.middleware';
+import isAdminLoggedIn from '../middlewares/isAdminLoggedIn.middleware';
 import {
   initiatePayment,
   handleSuccessfulPayment,
@@ -17,65 +18,71 @@ import {
   getPaymentsByDateRange,
   getPaymentMethodStats,
   getRefundStats,
-  verifyPayment
-} from "../controllers/payment.controller";
-import isAdminLoggedIn from "../middlewares/isAdminLoggedIn.middleware";
-import razorpayService from "../services/razorpay.service";
+  verifyPayment,
+  confirmCODPayment,
+  getPendingCODPayments,
+  getPaymentDetailsAdmin,
+  getPaymentByOrderIdAdmin
+} from '../controllers/payment.controller';
 
 const paymentRouter = Router();
 
-// Payment initiation and processing
+// ============================================================================
+// USER ROUTES - Payment Operations
+// ============================================================================
+
+// Initiate payment for an order
 paymentRouter.post('/initiate', isLoggedIn, asyncHandler(initiatePayment));
+
+// Handle Razorpay payment callbacks
 paymentRouter.post('/success', asyncHandler(handleSuccessfulPayment));
 paymentRouter.post('/failure', asyncHandler(handleFailedPayment));
 paymentRouter.post('/verify', asyncHandler(verifyPayment));
 
-// Payment details and history
+// Get payment details
 paymentRouter.get('/details/:paymentId', isLoggedIn, asyncHandler(getPaymentDetails));
 paymentRouter.get('/order/:orderId', isLoggedIn, asyncHandler(getPaymentByOrderId));
 paymentRouter.get('/order-number/:orderNumber', isLoggedIn, asyncHandler(getPaymentByOrderNumber));
+
+// Payment history
 paymentRouter.get('/history', isLoggedIn, asyncHandler(getPaymentHistory));
 
-// Refund management (Admin only)
-paymentRouter.post('/refund/initiate', isAdminLoggedIn, asyncHandler(initiateRefund));
-paymentRouter.put('/refund/process', isAdminLoggedIn, asyncHandler(processRefund));
+// User payment stats
+paymentRouter.get('/stats/my-stats', isLoggedIn, asyncHandler(getPaymentStats));
 
-// Analytics and reporting (Admin only)
-paymentRouter.get('/stats', isAdminLoggedIn, asyncHandler(getPaymentStats));
-paymentRouter.get('/stats/methods', isAdminLoggedIn, asyncHandler(getPaymentMethodStats));
-paymentRouter.get('/stats/refunds', isAdminLoggedIn, asyncHandler(getRefundStats));
+// ============================================================================
+// ADMIN ROUTES - Payment Management
+// ============================================================================
 
-// Payment filtering (Admin only)
-paymentRouter.get('/method/:method', isAdminLoggedIn, asyncHandler(getPaymentsByMethod));
-paymentRouter.get('/status/:status', isAdminLoggedIn, asyncHandler(getPaymentsByStatus));
-paymentRouter.get('/date-range', isAdminLoggedIn, asyncHandler(getPaymentsByDateRange));
+// Payment details (admin - no user verification)
+paymentRouter.get('/admin/details/:paymentId', isAdminLoggedIn, asyncHandler(getPaymentDetailsAdmin));
+paymentRouter.get('/admin/order/:orderId', isAdminLoggedIn, asyncHandler(getPaymentByOrderIdAdmin));
 
-// Webhook handling
-paymentRouter.post('/webhook',
-  asyncHandler(async (req, res) => {
-    const eventId = req.headers['x-razorpay-event-id'];
-    const event = req.headers['x-razorpay-event'] as string; 
-    
-    if (!eventId || !event) {
-      return res.status(400).json({ 
-        error: 'Missing required webhook headers' 
-      });
-    }
+// Filter payments
+paymentRouter.get('/admin/by-method/:method', isAdminLoggedIn, asyncHandler(getPaymentsByMethod));
+paymentRouter.get('/admin/by-status/:status', isAdminLoggedIn, asyncHandler(getPaymentsByStatus));
+paymentRouter.get('/admin/by-date-range', isAdminLoggedIn, asyncHandler(getPaymentsByDateRange));
 
-    try {
-      await razorpayService.handleWebhook(event, req.body);
-      res.json({ 
-        status: 'ok',
-        message: 'Webhook processed successfully' 
-      });
-    } catch (error: any) {
-      console.error('Webhook processing error:', error);
-      res.status(500).json({ 
-        error: 'Webhook processing failed',
-        message: error.message 
-      });
-    }
-  })
-);
+// Statistics
+paymentRouter.get('/admin/stats', isAdminLoggedIn, asyncHandler(getPaymentStats));
+paymentRouter.get('/admin/stats/by-method', isAdminLoggedIn, asyncHandler(getPaymentMethodStats));
+paymentRouter.get('/admin/stats/refunds', isAdminLoggedIn, asyncHandler(getRefundStats));
+
+// ============================================================================
+// ADMIN ROUTES - Refund Management
+// ============================================================================
+
+paymentRouter.post('/admin/refund/initiate', isAdminLoggedIn, asyncHandler(initiateRefund));
+paymentRouter.patch('/admin/refund/process', isAdminLoggedIn, asyncHandler(processRefund));
+
+// ============================================================================
+// ADMIN ROUTES - COD Payment Management
+// ============================================================================
+
+// Confirm COD payment (when delivery executive collects payment)
+paymentRouter.post('/admin/cod/confirm', isAdminLoggedIn, asyncHandler(confirmCODPayment));
+
+// Get pending COD payments
+paymentRouter.get('/admin/cod/pending', isAdminLoggedIn, asyncHandler(getPendingCODPayments));
 
 export default paymentRouter;

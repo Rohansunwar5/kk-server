@@ -251,7 +251,7 @@ class AuthService {
 }) {
   try {
     await mailService.sendEmail(
-      'caroal.official06@gmail.com',
+      'kultivatedkarats@gmail.com',
       'influencer-email.ejs',
       {
         influencerName: params.influencerName,

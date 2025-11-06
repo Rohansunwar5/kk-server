@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const cartItemSchema = new mongoose.Schema (
+const cartItemSchema = new mongoose.Schema(
     {
         product: {
             type: mongoose.Types.ObjectId,
@@ -9,23 +9,24 @@ const cartItemSchema = new mongoose.Schema (
         quantity: {
             type: Number,
             required: true,
-            min: 1, 
+            min: 1,
             default: 1,
         },
-        size: {
-            type: String,
+        karat: {
+            type: Number,
+            enum: [9, 14, 18],
             required: true,
         },
-        color: {
-            colorName: {
-                type: String,
-                required: true,
-                trim: true,
-            },
-            colorHex: {
-                type: String,
-                required: true,
-            }
+        sku: {
+            type: String,
+            required: true,
+            trim: true,
+            uppercase: true,
+        },
+        price: {
+            type: Number,
+            required: true,
+            min: 0,
         },
         selectedImage: {
             type: String,
@@ -36,7 +37,7 @@ const cartItemSchema = new mongoose.Schema (
             default: Date.now
         }
     }
-)
+);
 
 const cartSchema = new mongoose.Schema(
     {
@@ -44,18 +45,36 @@ const cartSchema = new mongoose.Schema(
             type: mongoose.Types.ObjectId,
             required: false,
         },
-        items: [
-            cartItemSchema
-        ],
+        items: [cartItemSchema],
         appliedCoupon: {
             code: String,
             discountId: mongoose.Types.ObjectId,
             discountAmount: Number
         },
-        appliedVoucher: {
+        appliedGiftCard: {
             code: String,
-            discountId: mongoose.Types.ObjectId,
-            discountAmount: Number
+            giftCardId: mongoose.Types.ObjectId,
+            redeemedAmount: Number
+        },
+        appliedVoucher: {
+            code: {
+                type: String,
+            },
+            voucherId: {
+                type: mongoose.Types.ObjectId,
+            },
+            name: {
+                type: String,
+            },
+            amount: {
+                type: Number,
+            },
+            discountAmount: {
+                type: Number,
+            },
+            appliedAt: {
+                type: Date,
+            }
         },
         sessionId: {
             type: String,
@@ -69,43 +88,55 @@ const cartSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         }
-    }, { timestamps : true }
-)
+    },
+    { timestamps: true }
+);
 
-cartItemSchema.index({ product: 1, 'color.colorName': 1, size: 1 });
-
+// Indexes for better query performance
+cartItemSchema.index({ product: 1, karat: 1, sku: 1 });
 cartSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 cartSchema.index({ sessionId: 1 });
 cartSchema.index({ user: 1, isActive: 1 });
 
-export interface ICartItemColor {
-    colorName: string;
-    colorHex: string;
-}
-
-export interface ICartItem extends mongoose.Schema {
+export interface ICartItem extends mongoose.Document {
     _id: string;
-    product: mongoose.Types.ObjectId,
-    quantity: number,
-    size: string,
-    color: ICartItemColor;
+    product: mongoose.Types.ObjectId;
+    quantity: number;
+    karat: 9 | 14 | 18;
+    sku: string;
+    price: number;
     selectedImage: string;
     addedAt: Date;
 }
 
-export interface ICart extends mongoose.Schema {
+export interface ICart extends mongoose.Document {
+    _id: string;
     user?: mongoose.Types.ObjectId;
     items: ICartItem[];
     appliedCoupon?: {
         code: string;
-        discountId: mongoose.Types.ObjectId;
+        discountId: string;
+        type: string;
+        discountType: string;
+        value: number;
         discountAmount: number;
+        discountedTotal: number;
+        appliedAt: Date;
     };
     appliedVoucher?: {
         code: string;
-        discountId: mongoose.Types.ObjectId;
+        voucherId: string;
+        name: string;
+        amount: number;
         discountAmount: number;
-    }
+        appliedAt: Date;
+    };
+    appliedGiftCard?: {
+        code: string;
+        giftCardId: string;
+        redeemedAmount: number;
+        appliedAt: Date;
+    };
     sessionId?: string;
     expiresAt: Date;
     isActive: boolean;
@@ -113,4 +144,4 @@ export interface ICart extends mongoose.Schema {
     updatedAt: Date;
 }
 
-export default mongoose.model<ICart>('Cart', cartSchema)
+export default mongoose.model<ICart>('Cart', cartSchema);

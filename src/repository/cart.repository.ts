@@ -5,21 +5,25 @@ import { DiscountCalculationResult } from "./discount.repository";
 export interface CartItemInput {
   product: string;
   quantity: number;
-  size: string;
-  color: {
-    colorName: string;
-    colorHex: string;
-  };
+  karat: 9 | 14 | 18;
+  sku: string;
+  price: number;
   selectedImage: string;
+}
+
+export interface ApplyVoucherInput {
+    code: string;
+    voucherId: string;
+    name: string;
+    amount: number;
+    discountAmount: number;
 }
 
 export interface UpdateCartItemInput {
   quantity?: number;
-  size?: string;
-  color?: {
-    colorName: string;
-    colorHex: string;
-  };
+  karat?: 9 | 14 | 18;
+  sku?: string;
+  price?: number;
   selectedImage?: string;
 }
 
@@ -44,21 +48,21 @@ export class CartRepository {
     }
 
     async addItemToCart(userId: string, item: CartItemInput) {
-        const exisitngCart = await this._model.findOne({
+        const existingCart = await this._model.findOne({
             user: userId,
             'items.product': item.product,
-            'items.color.colorName': item.color.colorName,
-            'items.size': item.size
+            'items.karat': item.karat,
+            'items.sku': item.sku
         });
 
-        if(exisitngCart) {
+        if(existingCart) {
             return this.updateExistingCartItem(userId, item);
         }
 
         return this._model.findOneAndUpdate(
             { user: userId },
             { $push: { items: item }},
-            { new: true, upsert:true }
+            { new: true, upsert: true }
         )
     }
 
@@ -67,12 +71,15 @@ export class CartRepository {
             { 
                 user: userId,
                 'items.product': item.product,
-                'items.color.colorName': item.color.colorName,
-                'items.size': item.size
+                'items.karat': item.karat,
+                'items.sku': item.sku
             },
             { 
                 $inc: { 'items.$.quantity': item.quantity },
-                $set: { 'items.$.addedAt': new Date() }
+                $set: { 
+                    'items.$.addedAt': new Date(),
+                    'items.$.price': item.price // Update price in case it changed
+                }
             },
             { new: true }
         );
@@ -80,17 +87,20 @@ export class CartRepository {
 
     async updateCartItem(userId: string, itemId: string, updateData: UpdateCartItemInput) {
         const update: any = { 
-            'items.$.addedAt': new Date() // Use addedAt instead of updatedAt as per schema
+            'items.$.addedAt': new Date()
         };
         
         if (updateData.quantity !== undefined) {
             update['items.$.quantity'] = updateData.quantity;
         }
-        if (updateData.size !== undefined) {
-            update['items.$.size'] = updateData.size;
+        if (updateData.karat !== undefined) {
+            update['items.$.karat'] = updateData.karat;
         }
-        if (updateData.color !== undefined) {
-            update['items.$.color'] = updateData.color;
+        if (updateData.sku !== undefined) {
+            update['items.$.sku'] = updateData.sku;
+        }
+        if (updateData.price !== undefined) {
+            update['items.$.price'] = updateData.price;
         }
         if (updateData.selectedImage !== undefined) {
             update['items.$.selectedImage'] = updateData.selectedImage;
@@ -150,6 +160,30 @@ export class CartRepository {
         );
     }
 
+    async applyGiftCard(userId: string, giftCardData: { code: string; giftCardId: string; redeemedAmount: number }) {
+        return this._model.findOneAndUpdate(
+            { user: userId },
+            { 
+                $set: { 
+                    appliedGiftCard: {
+                        code: giftCardData.code,
+                        giftCardId: giftCardData.giftCardId,
+                        redeemedAmount: giftCardData.redeemedAmount
+                    }
+                } 
+            },
+            { new: true }
+        );
+    }
+
+    async clearGiftCard(userId: string) {
+        return this._model.findOneAndUpdate(
+            { user: userId },
+            { $unset: { appliedGiftCard: 1 } },
+            { new: true }
+        );
+    }
+
     async clearCartItems(userId: string) {
         return this._model.findOneAndUpdate(
             { user: userId },
@@ -173,23 +207,23 @@ export class CartRepository {
     }
 
     async replaceCartItems(userId: string, items: CartItemInput[]) {
-        return cartModel.findOneAndUpdate(
+        return this._model.findOneAndUpdate(
             { user: userId },
             { $set: { items } },
             { new: true, upsert: true }
-        ).populate('items.product');
+        );
     }
 
     async addItemToCartBySessionId(sessionId: string, item: CartItemInput) {
-        const exisitngCart = await this._model.findOne({
+        const existingCart = await this._model.findOne({
             sessionId,
             isActive: true,
             'items.product': item.product,
-            'items.color.colorName': item.color.colorName,
-            'items.size': item.size
+            'items.karat': item.karat,
+            'items.sku': item.sku
         })
 
-        if(exisitngCart) {
+        if(existingCart) {
             return this.updateExistingCartItemBySessionId(sessionId, item);
         }
 
@@ -206,12 +240,15 @@ export class CartRepository {
                 sessionId,
                 isActive: true,
                 'items.product': item.product,
-                'items.color.colorName': item.color.colorName,
-                'items.size': item.size
+                'items.karat': item.karat,
+                'items.sku': item.sku
             },
             { 
                 $inc: { 'items.$.quantity': item.quantity },
-                $set: { 'items.$.addedAt': new Date() }
+                $set: { 
+                    'items.$.addedAt': new Date(),
+                    'items.$.price': item.price // Update price in case it changed
+                }
             },
             { new: true }
         );
@@ -225,11 +262,14 @@ export class CartRepository {
         if (updateData.quantity !== undefined) {
             update['items.$.quantity'] = updateData.quantity;
         }
-        if (updateData.size !== undefined) {
-            update['items.$.size'] = updateData.size;
+        if (updateData.karat !== undefined) {
+            update['items.$.karat'] = updateData.karat;
         }
-        if (updateData.color !== undefined) {
-            update['items.$.color'] = updateData.color;
+        if (updateData.sku !== undefined) {
+            update['items.$.sku'] = updateData.sku;
+        }
+        if (updateData.price !== undefined) {
+            update['items.$.price'] = updateData.price;
         }
         if (updateData.selectedImage !== undefined) {
             update['items.$.selectedImage'] = updateData.selectedImage;
@@ -238,6 +278,54 @@ export class CartRepository {
         return this._model.findOneAndUpdate(
             { sessionId, 'items._id': itemId, isActive: true },
             { $set: update },
+            { new: true }
+        );
+    }
+
+    async applyVoucher(userId: string, voucherData: ApplyVoucherInput) {
+        return this._model.findOneAndUpdate(
+            { user: userId },
+            {
+                $set: {
+                    appliedVoucher: {
+                        code: voucherData.code,
+                        voucherId: voucherData.voucherId,
+                        name: voucherData.name,
+                        amount: voucherData.amount,
+                        discountAmount: voucherData.discountAmount,
+                        appliedAt: new Date()
+                    }
+                }
+            },
+            { new: true }
+        );
+    }
+
+    async clearVoucher(userId: string) {
+        return this._model.findOneAndUpdate(
+            { user: userId },
+            {
+                $unset: { appliedVoucher: "" }
+            },
+            { new: true }
+        );
+    }
+
+    // Update the existing removeDiscount method to handle vouchers
+    async removeDiscount(userId: string, type: 'coupon' | 'voucher' | 'all') {
+        const updateQuery: any = {};
+        
+        if (type === 'coupon' || type === 'all') {
+            updateQuery.$unset = { ...updateQuery.$unset, appliedCoupon: "" };
+        }
+        
+        if (type === 'voucher' || type === 'all') {
+            updateQuery.$unset = { ...updateQuery.$unset, appliedVoucher: "" };
+        }
+        
+        return this._model.findOneAndUpdate(
+            { user: userId },
+            updateQuery,
             { new: true }
         );
     }
@@ -265,47 +353,29 @@ export class CartRepository {
         return this._model.findOneAndDelete({ sessionId, isActive: true });
     }
 
-    async removeDiscount(userId: string, type: 'coupon' | 'voucher' | 'all') {
-        const updateFields: any = {};
-        
-        if (type === 'coupon' || type === 'all') {
-            updateFields.appliedCoupon = 1;
-        }
-        
-        if (type === 'voucher' || type === 'all') {
-            updateFields.appliedVoucher = 1;
-        }
-        
-        return this._model.findOneAndUpdate(
-            { user: userId },
-            { $unset: updateFields },
-            { new: true }
-        );
-    }
-
-    async checkItemExists(userId: string, productId: string, colorName: string, size: string) {
+    async checkItemExists(userId: string, productId: string, karat: number, sku: string) {
         return this._model.findOne({
             user: userId,
             'items.product': productId,
-            'items.color.colorName': colorName,
-            'items.size': size
+            'items.karat': karat,
+            'items.sku': sku
         });
     }
 
-    async getCartItem(userId: string, productId: string, colorName: string, size: string) {
+    async getCartItem(userId: string, productId: string, karat: number, sku: string) {
         const cart = await this._model.findOne({
             user: userId,
             'items.product': productId,
-            'items.color.colorName': colorName,
-            'items.size': size
+            'items.karat': karat,
+            'items.sku': sku
         });
 
         if (!cart) return null;
 
         const item = cart.items.find(item => 
             item.product.toString() === productId &&
-            item.color.colorName === colorName &&
-            item.size === size
+            item.karat === karat &&
+            item.sku === sku
         );
 
         return item || null;

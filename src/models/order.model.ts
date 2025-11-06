@@ -20,7 +20,7 @@ const orderItemSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  productCode: {
+  productId: {
     type: String,
     required: true,
   },
@@ -33,20 +33,37 @@ const orderItemSchema = new mongoose.Schema({
     required: true,
     min: 1,
   },
-  size: {
-    type: String,
-    required: true, 
+  // NEW: Variant information
+  karat: {
+    type: Number,
+    enum: [9, 14, 18],
+    required: true,
   },
-  color: {
-    colorName: {
+  stoneType: {
+    type: String,
+    enum: ['regular_diamond', 'gemstone', 'colored_diamond'],
+    default: 'regular_diamond',
+  },
+  sku: {
+    type: String,
+    required: true,
+    trim: true,
+    uppercase: true,
+  },
+  // NEW: Optional customization selections
+  selectedColor: {
+    name: {
       type: String,
-      required: true,
       trim: true,
     },
-    colorHex: {
+    hexCode: {
       type: String,
-      required: true,
+      trim: true,
     }
+  },
+  selectedSize: {
+    type: String,
+    enum: ['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20'],
   },
   selectedImage: {
     type: String,
@@ -56,6 +73,12 @@ const orderItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0,
+  },
+  // NEW: Weight information at purchase time
+  grossWeight: {
+    type: Number,
+    min: 0,
+    default: 0,
   },
   itemTotal: {
     type: Number,
@@ -159,6 +182,11 @@ const orderSchema = new mongoose.Schema(
       discountId: mongoose.Types.ObjectId,
       discountAmount: Number,
     },
+    appliedGiftCard: {
+      code: String,
+      giftCardId: mongoose.Types.ObjectId,
+      redeemedAmount: Number,
+    },
     totalDiscountAmount: {
       type: Number,
       default: 0,
@@ -222,27 +250,31 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Indexes for better query performance
+// Updated indexes
 orderSchema.index({ user: 1, status: 1 });
 orderSchema.index({ user: 1, createdAt: -1 });
-orderSchema.index({ 'items.product': 1, 'items.color.colorName': 1, 'items.size': 1 });
-
-export interface IOrderItemColor {
-  colorName: string;
-  colorHex: string;
-}
+orderSchema.index({ 'items.product': 1, 'items.karat': 1, 'items.sku': 1 });
+orderSchema.index({ 'items.stoneType': 1 });
+orderSchema.index({ orderNumber: 1 });
 
 export interface IOrderItem {
   _id: string;
   product: mongoose.Types.ObjectId;
   productName: string;
-  productCode: string;
+  productId: string;
   productImage: string;
   quantity: number;
-  size: string;
-  color: IOrderItemColor;
+  karat: 9 | 14 | 18;
+  stoneType: 'regular_diamond' | 'gemstone' | 'colored_diamond';
+  sku: string;
+  selectedColor?: {
+    name: string;
+    hexCode?: string;
+  };
+  selectedSize?: string;
   selectedImage: string;
   priceAtPurchase: number;
+  grossWeight: number;
   itemTotal: number;
 }
 
@@ -274,6 +306,11 @@ export interface IOrder extends mongoose.Document {
     code: string;
     discountId: mongoose.Types.ObjectId;
     discountAmount: number;
+  };
+  appliedGiftCard?: {
+    code: string;
+    giftCardId: mongoose.Types.ObjectId;
+    redeemedAmount: number;
   };
   totalDiscountAmount: number;
   shippingCharge: number;

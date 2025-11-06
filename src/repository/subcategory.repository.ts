@@ -1,21 +1,17 @@
 import subCategoryModel, { ISubCategory } from '../models/subcategory.model';
 
 export interface ICreateSubCategoryParams {
-  subCategoryId: string;
   name: string;
   parentCategoryId: string;
-  productIds?: string[];
-  bannerIds?: string[];
+  imageUrls?: string[];
   description?: string;
   isActive?: boolean;
 }
 
 export interface IUpdateSubCategoryParams {
-  subCategoryId?: string;
   name?: string;
   parentCategoryId?: string;
-  productIds?: string[];
-  bannerIds?: string[];
+  imageUrls?: string[];
   description?: string;
   isActive?: boolean;
 }
@@ -31,10 +27,6 @@ export class SubCategoryRepository {
     return this._model.findById(id);
   }
 
-  async getSubCategoryBySubCategoryId(subCategoryId: string): Promise<ISubCategory | null> {
-    return this._model.findOne({ subCategoryId });
-  }
-
   async getSubCategoryByName(name: string): Promise<ISubCategory | null> {
     return this._model.findOne({ name });
   }
@@ -45,11 +37,9 @@ export class SubCategoryRepository {
 
   async createSubCategory(params: ICreateSubCategoryParams): Promise<ISubCategory> {
     return this._model.create({
-      subCategoryId: params.subCategoryId,
       name: params.name,
       parentCategoryId: params.parentCategoryId,
-      productIds: params.productIds || [],
-      bannerIds: params.bannerIds || [],
+      imageUrls: params.imageUrls || [],
       description: params.description || '',
       isActive: params.isActive !== undefined ? params.isActive : true,
     });
@@ -62,29 +52,9 @@ export class SubCategoryRepository {
     return this._model.findByIdAndUpdate(
       id,
       {
-        subCategoryId: params.subCategoryId,
         name: params.name,
         parentCategoryId: params.parentCategoryId,
-        productIds: params.productIds,
-        bannerIds: params.bannerIds,
-        description: params.description,
-        isActive: params.isActive,
-      },
-      { new: true }
-    );
-  }
-
-  async updateSubCategoryBySubCategoryId(
-    subCategoryId: string,
-    params: IUpdateSubCategoryParams
-  ): Promise<ISubCategory | null> {
-    return this._model.findOneAndUpdate(
-      { subCategoryId },
-      {
-        name: params.name,
-        parentCategoryId: params.parentCategoryId,
-        productIds: params.productIds,
-        bannerIds: params.bannerIds,
+        imageUrls: params.imageUrls,
         description: params.description,
         isActive: params.isActive,
       },
@@ -104,56 +74,34 @@ export class SubCategoryRepository {
     );
   }
 
-  async addProductToSubCategory(
-    subCategoryId: string,
-    productId: string
+  async addImageToSubCategory(
+    id: string,
+    imageUrl: string
   ): Promise<ISubCategory | null> {
-    return this._model.findOneAndUpdate(
-      { subCategoryId },
-      { $addToSet: { productIds: productId } },
+    return this._model.findByIdAndUpdate(
+      id,
+      { $addToSet: { imageUrls: imageUrl } },
       { new: true }
     );
   }
 
-  async removeProductFromSubCategory(
-    subCategoryId: string,
-    productId: string
+  async removeImageFromSubCategory(
+    id: string,
+    imageUrl: string
   ): Promise<ISubCategory | null> {
-    return this._model.findOneAndUpdate(
-      { subCategoryId },
-      { $pull: { productIds: productId } },
-      { new: true }
-    );
-  }
-
-  async addBannerToSubCategory(
-    subCategoryId: string,
-    bannerId: string
-  ): Promise<ISubCategory | null> {
-    return this._model.findOneAndUpdate(
-      { subCategoryId },
-      { $addToSet: { bannerIds: bannerId } },
-      { new: true }
-    );
-  }
-
-  async removeBannerFromSubCategory(
-    subCategoryId: string,
-    bannerId: string
-  ): Promise<ISubCategory | null> {
-    return this._model.findOneAndUpdate(
-      { subCategoryId },
-      { $pull: { bannerIds: bannerId } },
+    return this._model.findByIdAndUpdate(
+      id,
+      { $pull: { imageUrls: imageUrl } },
       { new: true }
     );
   }
 
   async updateParentCategory(
-    subCategoryId: string,
+    id: string,
     newParentCategoryId: string
   ): Promise<ISubCategory | null> {
-    return this._model.findOneAndUpdate(
-      { subCategoryId },
+    return this._model.findByIdAndUpdate(
+      id,
       { parentCategoryId: newParentCategoryId },
       { new: true }
     );

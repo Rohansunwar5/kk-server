@@ -11,12 +11,46 @@ const imageSchema = new mongoose.Schema({
     }
 });
 
-// Variant schema for different karat options
+const colorOptionSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true,
+        trim: true,
+    },
+    hexCode: {
+        type: String,
+        trim: true,
+    },
+    imageUrls: [imageSchema], 
+});
+
+const stoneTypeOptionSchema = new mongoose.Schema({
+    type: {
+        type: String,
+        enum: ['regular_diamond', 'gemstone', 'colored_diamond'],
+        required: true,
+    },
+    label: {
+        type: String,
+        required: true,
+    },
+    isAvailable: {
+        type: Boolean,
+        default: true,
+    }
+});
+
+// Variant schema now includes stone type
 const variantSchema = new mongoose.Schema({
     karat: {
         type: Number,
         enum: [9, 14, 18],
         required: true,
+    },
+    stoneType: {
+        type: String,
+        enum: ['regular_diamond', 'gemstone', 'colored_diamond'],
+        default: 'regular_diamond',
     },
     sku: {
         type: String,
@@ -62,15 +96,45 @@ const productSchema = new mongoose.Schema(
             maxLength: 200,
         },
         categoryIds: [{
-            type: String,
+            type: mongoose.Types.ObjectId,
             required: true,
         }],
         subCategoryIds: [{
-            type: String,
+            type: mongoose.Types.ObjectId,
         }],
         collectionIds: [{
-            type: String,
+            type: mongoose.Types.ObjectId,
         }],
+        
+        // ============================================
+        // CUSTOMIZATION OPTIONS
+        // ============================================
+        customizationOptions: {
+            // Color customization
+            hasColorOptions: {
+                type: Boolean,
+                default: false,
+            },
+            colors: [colorOptionSchema],
+            
+            // Size customization (for rings, bangles)
+            hasSizeOptions: {
+                type: Boolean,
+                default: false,
+            },
+            sizes: [{
+                type: String,
+                enum: ['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20'],
+            }],
+            
+            // Stone type customization
+            hasStoneTypeOptions: {
+                type: Boolean,
+                default: false,
+            },
+            stoneTypes: [stoneTypeOptionSchema],
+        },
+        
         // Base weights (same across all karat variants)
         goldWeight: {
             type: Number,
@@ -174,8 +238,10 @@ const productSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
-        // Karat variants - each product can have multiple karat options
+        
+        // Variants - now includes combinations of karat + stone type
         variants: [variantSchema],
+        
         isActive: {
             type: Boolean,
             default: true,
@@ -197,9 +263,31 @@ export interface IImageUrl {
     publicId: string;
 }
 
+export interface IColorOption {
+    name: string;
+    hexCode?: string;
+    imageUrls?: IImageUrl[];
+}
+
+export interface IStoneTypeOption {
+    type: 'regular_diamond' | 'gemstone' | 'colored_diamond';
+    label: string;
+    isAvailable: boolean;
+}
+
+export interface ICustomizationOptions {
+    hasColorOptions: boolean;
+    colors: IColorOption[];
+    hasSizeOptions: boolean;
+    sizes: string[];
+    hasStoneTypeOptions: boolean;
+    stoneTypes: IStoneTypeOption[];
+}
+
 export interface IVariant {
     karat: 9 | 14 | 18;
-    sku: string; // Unique SKU for this variant (e.g., "RING001-14K")
+    stoneType: 'regular_diamond' | 'gemstone' | 'colored_diamond';
+    sku: string;
     price: number;
     stock: number;
     grossWeight: number;
@@ -210,9 +298,10 @@ export interface IProduct extends mongoose.Document {
     _id: string;
     productId: string;
     name: string;
-    categoryIds: string[];
-    subCategoryIds?: string[];
-    collectionIds?: string[];
+    categoryIds: mongoose.Types.ObjectId[];
+    subCategoryIds?: mongoose.Types.ObjectId[];
+    collectionIds?: mongoose.Types.ObjectId[];
+    customizationOptions: ICustomizationOptions;
     goldWeight: number;
     diamondWeight: number;
     netWeight: number;

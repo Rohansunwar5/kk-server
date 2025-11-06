@@ -3,13 +3,6 @@ import cartService from '../services/cart.service';
 import { ApplyDiscountInput, CartItemInput, RemoveDiscountInput, UpdateCartItemInput } from '../repository/cart.repository';
 import discountService from '../services/discount.service';
 
-export const getCart = async (req: Request, res: Response, next: NextFunction) => {
-  const { _id: userId } = req.user;
-  const response = await cartService.getCart(userId);
-  
-  next(response);
-};
-
 export const addItemToCart = async (req: Request, res: Response, next: NextFunction) => {
   const { _id: userId } = req.user;
   const itemData: CartItemInput = req.body;
@@ -30,13 +23,13 @@ export const updateCartItemByProduct = async (req: Request, res: Response, next:
 export const removeCartItemByProduct = async (req: Request, res: Response, next: NextFunction) => {
   const { _id: userId } = req.user;
   const { productId } = req.params;
-  const { size, colorName } = req.query;
+  const { karat, sku } = req.query;
   
   const response = await cartService.removeCartItemByProduct(
     userId, 
     productId, 
-    colorName as string, 
-    size as string
+    Number(karat), 
+    sku as string
   );
   next(response);
 };
@@ -128,25 +121,27 @@ export const validateCart: (req: Request, res: Response, next: NextFunction) => 
 
 export const addItemToGuestCartByProduct = async (req: Request, res: Response, next: NextFunction) => {
   const { sessionId, productId } = req.params;
-  const { quantity, size, color, selectedImage } = req.body; 
+  const { quantity, karat, sku, price, selectedImage } = req.body; 
   
   const response = await cartService.addItemToGuestCartByProduct(sessionId, productId, { 
     quantity, 
-    size, 
-    color, 
+    karat, 
+    sku, 
+    price, 
     selectedImage 
   });
   next(response);
 };
 
 export const updateGuestCartItemByProduct = async (req: Request, res: Response, next: NextFunction) => {
-  const { sessionId, itemId } = req.params; // Use itemId instead of productId
-  const { quantity, size, color, selectedImage } = req.body;
+  const { sessionId, itemId } = req.params;
+  const { quantity, karat, sku, price, selectedImage } = req.body;
   
   const response = await cartService.updateGuestCartItemById(sessionId, itemId, { 
     quantity, 
-    size, 
-    color, 
+    karat, 
+    sku, 
+    price, 
     selectedImage 
   });
   next(response);
@@ -154,14 +149,28 @@ export const updateGuestCartItemByProduct = async (req: Request, res: Response, 
 
 export const removeGuestCartItemByProduct = async (req: Request, res: Response, next: NextFunction) => {
   const { sessionId, productId } = req.params;
-  const { size, colorName } = req.query;
+  const { karat, sku } = req.query;
   
   const response = await cartService.removeGuestCartItemByProduct(
     sessionId, 
     productId, 
-    colorName as string, 
-    size as string
+    Number(karat), 
+    sku as string
   );
+  next(response);
+};
+
+export const applyGiftCard = async (req: Request, res: Response, next: NextFunction) => {
+  const { _id: userId } = req.user;
+  const { code, amount } = req.body;
+
+  const response = await cartService.applyGiftCard(userId, { code, amount });
+  next(response);
+};
+
+export const removeGiftCard = async (req: Request, res: Response, next: NextFunction) => {
+  const { _id: userId } = req.user;
+  const response = await cartService.removeGiftCard(userId);
   next(response);
 };
 
@@ -171,4 +180,48 @@ export const mergeGuestCartOnLogin = async (req: Request, res: Response, next: N
   
   const response = await cartService.mergeGuestCartOnLogin(userId, sessionId);
   next(response);
+};
+
+export const applyVoucher = async (req: Request, res: Response) => {
+    const userId = (req as any).user._id;
+    const { code } = req.body;
+
+    if (!code) {
+        return res.status(400).json({
+            success: false,
+            message: 'Voucher code is required'
+        });
+    }
+
+    const cart = await cartService.applyVoucher(userId, { code });
+
+    res.status(200).json({
+        success: true,
+        message: 'Voucher applied successfully',
+        data: cart
+    });
+};
+
+export const removeVoucher = async (req: Request, res: Response) => {
+    const userId = (req as any).user._id;
+
+    const cart = await cartService.removeVoucher(userId);
+
+    res.status(200).json({
+        success: true,
+        message: 'Voucher removed successfully',
+        data: cart
+    });
+};
+
+// You may also want to update your existing getCart controller 
+// to show voucher details in the response
+export const getCart = async (req: Request, res: Response) => {
+    const userId = (req as any).user._id;
+    const cartData = await cartService.getCartWithDetails(userId);
+
+    res.status(200).json({
+        success: true,
+        data: cartData
+    });
 };

@@ -12,7 +12,7 @@ const startWorker = async () => {
     await connectDB();
     await redisClient.connect();
 
-    const port = normalizePort(process.env.PORT || '4030');
+    const port = normalizePort(process.env.PORT || '4010');
 
     const onError = (error: any) => {
       if (error.syscall !== 'listen') throw error;

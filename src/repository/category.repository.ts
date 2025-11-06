@@ -4,8 +4,7 @@ export interface ICreateCategoryParams {
   categoryId: string;
   name: string;
   subCategoryIds?: string[];
-  productIds?: string[];
-  bannerIds?: string[];
+  imageUrl?: string[];
   description?: string;
   isActive?: boolean;
 }
@@ -14,8 +13,7 @@ export interface IUpdateCategoryParams {
   categoryId?: string;
   name?: string;
   subCategoryIds?: string[];
-  productIds?: string[];
-  bannerIds?: string[];
+  imageUrl?: string[];
   description?: string;
   isActive?: boolean;
 }
@@ -28,8 +26,9 @@ export class CategoryRepository {
   }
 
   async getCategoryById(id: string): Promise<ICategory | null> {
-    return this._model.findById(id);
-  }
+  // Uses MongoDB _id directly
+  return this._model.findById(id);
+}
 
   async getCategoryByCategoryId(categoryId: string): Promise<ICategory | null> {
     return this._model.findOne({ categoryId });
@@ -44,29 +43,26 @@ export class CategoryRepository {
       categoryId: params.categoryId,
       name: params.name,
       subCategoryIds: params.subCategoryIds || [],
-      productIds: params.productIds || [],
-      bannerIds: params.bannerIds || [],
+      imageUrl: params.imageUrl || [],
       description: params.description || '',
       isActive: params.isActive !== undefined ? params.isActive : true,
     });
   }
 
   async updateCategoryById(id: string, params: IUpdateCategoryParams): Promise<ICategory | null> {
+    // Update only the fields passed in params, no categoryId included
     return this._model.findByIdAndUpdate(
       id,
       {
-        categoryId: params.categoryId,
         name: params.name,
         subCategoryIds: params.subCategoryIds,
-        productIds: params.productIds,
-        bannerIds: params.bannerIds,
+        imageUrl: params.imageUrl,
         description: params.description,
-        isActive: params.isActive,
+        isActive: params.isActive
       },
       { new: true }
     );
   }
-
   async updateCategoryByCategoryId(
     categoryId: string,
     params: IUpdateCategoryParams
@@ -76,8 +72,7 @@ export class CategoryRepository {
       {
         name: params.name,
         subCategoryIds: params.subCategoryIds,
-        productIds: params.productIds,
-        bannerIds: params.bannerIds,
+        imageUrl: params.imageUrl,
         description: params.description,
         isActive: params.isActive,
       },

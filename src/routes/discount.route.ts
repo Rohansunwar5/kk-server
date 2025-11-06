@@ -15,12 +15,12 @@ import isAdminLoggedIn from '../middlewares/isAdminLoggedIn.middleware';
 const discountRouter = Router();
 
 // Admin routes
-discountRouter.post('/', isAdminLoggedIn, asyncHandler(createDiscount));
-discountRouter.put('/:id', isAdminLoggedIn, asyncHandler(updateDiscount));
-discountRouter.delete('/:id', isAdminLoggedIn, asyncHandler(deleteDiscount));
-discountRouter.get('/all', isAdminLoggedIn, asyncHandler(getAllDiscounts));
-discountRouter.get('/expired', isAdminLoggedIn, asyncHandler(getExpiredDiscounts));
-discountRouter.get('/:id/stats', isAdminLoggedIn, asyncHandler(getDiscountStats));
+discountRouter.post('/',  asyncHandler(createDiscount));
+discountRouter.put('/:id', asyncHandler(updateDiscount));
+discountRouter.delete('/:id', asyncHandler(deleteDiscount));
+discountRouter.get('/all', asyncHandler(getAllDiscounts));
+discountRouter.get('/expired', asyncHandler(getExpiredDiscounts));
+discountRouter.get('/:id/stats', asyncHandler(getDiscountStats));
 
 // Public/User routes
 discountRouter.get('/active', asyncHandler(getActiveDiscounts));

@@ -16,12 +16,9 @@ const categorySchema = new mongoose.Schema(
             maxLength: 100,
         },
         subCategoryIds: [{
-            type: String,
+            type: mongoose.Types.ObjectId,
         }],
-        productIds: [{
-            type: String,
-        }],
-        bannerIds: [{
+        imageUrl: [{
             type: String,
         }],
         description: {
@@ -43,11 +40,10 @@ categorySchema.index({ name: 'text', description: 'text' });
 
 export interface ICategory extends mongoose.Document {
     _id: string;
-    categoryId: string;
+    categoryId: mongoose.Types.ObjectId;
     name: string;
     subCategoryIds?: string[];
-    productIds?: string[];
-    bannerIds?: string[];
+    imageUrl?: string[];
     description: string;
     isActive: boolean;
     createdAt: Date;

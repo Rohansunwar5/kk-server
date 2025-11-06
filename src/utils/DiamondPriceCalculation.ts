@@ -7,9 +7,9 @@
 // GOLD RATES (Update these when rates change)
 // ============================================
 export const GOLD_RATES = {
-    9: 5750,   // 9K gold rate per gram
-    14: 7670,  // 14K gold rate per gram
-    18: 9880,  // 18K gold rate per gram
+    9: 6000,   // 9K gold rate per gram
+    14: 8000,  // 14K gold rate per gram
+    18: 10000,  // 18K gold rate per gram
 } as const;
 
 // ============================================

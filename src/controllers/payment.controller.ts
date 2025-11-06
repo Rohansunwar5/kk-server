@@ -1,10 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import paymentService from "../services/payment.service";
 import { IPaymentMethod, IPaymentStatus } from "../models/payment.model";
+import { BadRequestError } from "../errors/bad-request.error";
 
 export const initiatePayment = async (req: Request, res: Response, next: NextFunction) => {
   const { orderId, method, notes } = req.body;
   const user = req.user._id;
+
+  if (!orderId || !method) {
+    throw new BadRequestError('Order ID and payment method are required');
+  }
+
+  if (!Object.values(IPaymentMethod).includes(method)) {
+    throw new BadRequestError('Invalid payment method');
+  }
   
   const response = await paymentService.initiatePayment({ 
     orderId, 
@@ -25,6 +34,13 @@ export const handleSuccessfulPayment = async (req: Request, res: Response) => {
       razorpay_payment_id,
       razorpay_signature: razorpay_signature ? 'present' : 'missing'
     });
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required payment parameters'
+      });
+    }
 
     const result = await paymentService.handleSuccessfulPayment(
       razorpay_order_id,
@@ -48,6 +64,11 @@ export const handleSuccessfulPayment = async (req: Request, res: Response) => {
 
 export const handleFailedPayment = async (req: Request, res: Response, next: NextFunction) => {
   const { razorpayOrderId, razorpayPaymentId, failureReason } = req.body;
+
+  if (!razorpayOrderId) {
+    throw new BadRequestError('Razorpay order ID is required');
+  }
+
   const response = await paymentService.handleFailedPayment(
     razorpayOrderId, 
     razorpayPaymentId, 
@@ -84,13 +105,26 @@ export const getPaymentByOrderNumber = async (req: Request, res: Response, next:
 export const getPaymentHistory = async (req: Request, res: Response, next: NextFunction) => {
   const user = req.user._id;
   const { page = 1, limit = 10 } = req.query;
-  const response = await paymentService.getPaymentHistory(user, Number(page), Number(limit));
+  
+  const response = await paymentService.getPaymentHistory(
+    user, 
+    Number(page), 
+    Number(limit)
+  );
   
   next(response);
 };
 
 export const initiateRefund = async (req: Request, res: Response, next: NextFunction) => {
   const { paymentId, amount, reason } = req.body;
+
+  if (!paymentId || !amount) {
+    throw new BadRequestError('Payment ID and refund amount are required');
+  }
+
+  if (amount <= 0) {
+    throw new BadRequestError('Refund amount must be greater than 0');
+  }
   
   const response = await paymentService.initiateRefund({
     paymentId,
@@ -103,6 +137,14 @@ export const initiateRefund = async (req: Request, res: Response, next: NextFunc
 
 export const processRefund = async (req: Request, res: Response, next: NextFunction) => {
   const { paymentId, refundId, status, razorpayRefundId } = req.body;
+
+  if (!paymentId || !refundId || !status) {
+    throw new BadRequestError('Payment ID, refund ID, and status are required');
+  }
+
+  if (!['pending', 'processed', 'failed'].includes(status)) {
+    throw new BadRequestError('Invalid refund status');
+  }
   
   const response = await paymentService.processRefund({
     paymentId,
@@ -124,6 +166,10 @@ export const getPaymentStats = async (req: Request, res: Response, next: NextFun
 export const getPaymentsByMethod = async (req: Request, res: Response, next: NextFunction) => {
   const { method } = req.params;
   const { page = 1, limit = 10 } = req.query;
+
+  if (!Object.values(IPaymentMethod).includes(method as IPaymentMethod)) {
+    throw new BadRequestError('Invalid payment method');
+  }
   
   const response = await paymentService.getPaymentsByMethod(
     method as IPaymentMethod, 
@@ -137,6 +183,10 @@ export const getPaymentsByMethod = async (req: Request, res: Response, next: Nex
 export const getPaymentsByStatus = async (req: Request, res: Response, next: NextFunction) => {
   const { status } = req.params;
   const { page = 1, limit = 10 } = req.query;
+
+  if (!Object.values(IPaymentStatus).includes(status as IPaymentStatus)) {
+    throw new BadRequestError('Invalid payment status');
+  }
   
   const response = await paymentService.getPaymentsByStatus(
     status as IPaymentStatus, 
@@ -148,31 +198,21 @@ export const getPaymentsByStatus = async (req: Request, res: Response, next: Nex
 };
 
 export const getPaymentsByDateRange = async (req: Request, res: Response, next: NextFunction) => {
-  const { startDate, endDate } = req.query;
-  const { page = 1, limit = 10 } = req.query;
+  const { startDate, endDate, page = 1, limit = 10 } = req.query;
   
   if (!startDate || !endDate) {
-    return res.status(400).json({
-      success: false,
-      message: 'Start date and end date are required'
-    });
+    throw new BadRequestError('Start date and end date are required');
   }
   
   const start = new Date(startDate as string);
   const end = new Date(endDate as string);
   
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid date format'
-    });
+    throw new BadRequestError('Invalid date format');
   }
   
   if (start >= end) {
-    return res.status(400).json({
-      success: false,
-      message: 'Start date must be before end date'
-    });
+    throw new BadRequestError('Start date must be before end date');
   }
   
   const response = await paymentService.getPaymentsByDateRange(
@@ -203,7 +243,6 @@ export const verifyPayment = async (req: Request, res: Response) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    // Validate required parameters
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({
         success: false,
@@ -229,4 +268,46 @@ export const verifyPayment = async (req: Request, res: Response) => {
       message: error.message || 'Payment verification failed'
     });
   }
+};
+
+// NEW: COD payment confirmation
+export const confirmCODPayment = async (req: Request, res: Response, next: NextFunction) => {
+  const { orderId, collectedAmount, notes } = req.body;
+
+  if (!orderId || !collectedAmount) {
+    throw new BadRequestError('Order ID and collected amount are required');
+  }
+
+  if (collectedAmount <= 0) {
+    throw new BadRequestError('Collected amount must be greater than 0');
+  }
+
+  const response = await paymentService.confirmCODPayment(orderId, collectedAmount, notes);
+  
+  next(response);
+};
+
+// NEW: Get pending COD payments
+export const getPendingCODPayments = async (req: Request, res: Response, next: NextFunction) => {
+  const { page = 1, limit = 10 } = req.query;
+  
+  const response = await paymentService.getPendingCODPayments(Number(page), Number(limit));
+  
+  next(response);
+};
+
+// NEW: Admin - Get payment details (no user verification)
+export const getPaymentDetailsAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  const { paymentId } = req.params;
+  const response = await paymentService.getPaymentDetails(paymentId);
+  
+  next(response);
+};
+
+// NEW: Admin - Get payment by order ID (no user verification)
+export const getPaymentByOrderIdAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  const { orderId } = req.params;
+  const response = await paymentService.getPaymentByOrderId(orderId);
+  
+  next(response);
 };

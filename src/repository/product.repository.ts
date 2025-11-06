@@ -1,12 +1,13 @@
-import Product, { IProduct, IVariant } from '../models/product.model';
+import Product, { IProduct, IVariant, ICustomizationOptions } from '../models/product.model';
 import mongoose from 'mongoose';
 
 export interface ICreateProductParams {
   productId: string;
   name: string;
-  categoryIds: string[];
-  subCategoryIds?: string[];
-  collectionIds?: string[];
+  categoryIds: mongoose.Types.ObjectId[];
+  subCategoryIds?: mongoose.Types.ObjectId[];
+  collectionIds?: mongoose.Types.ObjectId[];
+  customizationOptions: ICustomizationOptions; // NEW
   netWeight: number;
   solitareWeight?: number;
   multiDiamondWeight?: number;
@@ -46,8 +47,8 @@ export interface IProductFilters {
     min?: number;
     max?: number;
   };
-  categories?: string[];
-  collections?: string[];
+  categories?: mongoose.Types.ObjectId[];
+  collections?: mongoose.Types.ObjectId[];
 }
 
 export interface IPaginationParams {
@@ -86,10 +87,8 @@ export class ProductRepository {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
 
-    // Build query
     const query: any = {};
 
-    // Gender filter
     if (filters.gender?.male || filters.gender?.female) {
       const genders: string[] = [];
       if (filters.gender.male) genders.push('Male');
@@ -97,7 +96,6 @@ export class ProductRepository {
       query.gender = { $in: genders };
     }
 
-    // Price filter
     if (filters.price?.min !== undefined || filters.price?.max !== undefined) {
       const minPrice = filters.price.min !== undefined ? Number(filters.price.min) : 0;
       const maxPrice = filters.price.max !== undefined ? Number(filters.price.max) : Infinity;
@@ -110,19 +108,12 @@ export class ProductRepository {
       }
     }
 
-    // Category filter
     if (filters.categories && filters.categories.length > 0) {
       query.categoryIds = { $in: filters.categories };
     }
 
-    // Collection filter
     if (filters.collections && filters.collections.length > 0) {
-      const validCollectionIds = filters.collections.filter(id =>
-        mongoose.Types.ObjectId.isValid(id)
-      );
-      if (validCollectionIds.length > 0) {
-        query.collectionIds = { $in: validCollectionIds };
-      }
+      query.collectionIds = { $in: filters.collections };
     }
 
     const [products, total] = await Promise.all([
@@ -166,11 +157,12 @@ export class ProductRepository {
   async updateProductVariantPrice(
     productId: string,
     karat: number,
+    stoneType: string,
     price: number,
     grossWeight: number
   ): Promise<IProduct | null> {
     return this._model.findOneAndUpdate(
-      { productId, 'variants.karat': karat },
+      { productId, 'variants.karat': karat, 'variants.stoneType': stoneType },
       {
         $set: {
           'variants.$.price': price,
@@ -258,25 +250,190 @@ export class ProductRepository {
 
   async removeVariantFromProduct(
     productId: string,
-    karat: number
+    karat: number,
+    stoneType: string
   ): Promise<IProduct | null> {
     return this._model.findOneAndUpdate(
       { productId },
-      { $pull: { variants: { karat } } },
+      { $pull: { variants: { karat, stoneType } } },
       { new: true }
     ).lean();
   }
 
-  async getProductsByCategoryIds(categoryIds: string[]): Promise<IProduct[]> {
+  async getProductsByCategoryIds(categoryIds: mongoose.Types.ObjectId[]): Promise<IProduct[]> {
     return this._model.find({
       categoryIds: { $in: categoryIds }
     }).lean();
   }
 
-  async getProductsByCollectionIds(collectionIds: string[]): Promise<IProduct[]> {
+  async getProductsByCollectionIds(collectionIds: mongoose.Types.ObjectId[]): Promise<IProduct[]> {
     return this._model.find({
       collectionIds: { $in: collectionIds }
     }).lean();
+  }
+
+  async updateVariantStock(productId: string, sku: string, newStock: number) {
+    return this._model.findOneAndUpdate(
+      {
+        _id: productId,
+        'variants.sku': sku
+      },
+      {
+        $set: {
+          'variants.$.stock': newStock
+        }
+      },
+      { new: true }
+    );
+  }
+
+  async updateVariantAvailability(productId: string, sku: string, isAvailable: boolean) {
+    return this._model.findOneAndUpdate(
+      {
+        _id: productId,
+        'variants.sku': sku
+      },
+      {
+        $set: {
+          'variants.$.isAvailable': isAvailable
+        }
+      },
+      { new: true }
+    );
+  }
+
+  /**
+   * Get variant by SKU across all products
+   * @param sku - Variant SKU
+   */
+  async getVariantBySku(sku: string) {
+    const product = await this._model.findOne({
+      'variants.sku': sku.toUpperCase()
+    });
+
+    if (!product) {
+      return null;
+    }
+
+    const variant = product.variants.find(v => v.sku === sku.toUpperCase());
+    
+    return {
+      product: {
+        _id: product._id,
+        productId: product.productId,
+        name: product.name
+      },
+      variant
+    };
+  }
+
+  /**
+   * Increment variant stock (atomic operation)
+   * @param productId - Product ID
+   * @param sku - Variant SKU
+   * @param quantity - Quantity to add
+   */
+  async incrementVariantStock(productId: string, sku: string, quantity: number) {
+    return this._model.findOneAndUpdate(
+      {
+        _id: productId,
+        'variants.sku': sku
+      },
+      {
+        $inc: {
+          'variants.$.stock': quantity
+        }
+      },
+      { new: true }
+    );
+  }
+
+  /**
+   * Decrement variant stock (atomic operation with stock check)
+   * @param productId - Product ID
+   * @param sku - Variant SKU
+   * @param quantity - Quantity to reduce
+   */
+  async decrementVariantStock(productId: string, sku: string, quantity: number) {
+    // First check if sufficient stock exists
+    const product = await this._model.findOne({
+      _id: productId,
+      'variants.sku': sku,
+      'variants.stock': { $gte: quantity }
+    });
+
+    if (!product) {
+      throw new Error(`Insufficient stock for SKU: ${sku}`);
+    }
+
+    return this._model.findOneAndUpdate(
+      {
+        _id: productId,
+        'variants.sku': sku
+      },
+      {
+        $inc: {
+          'variants.$.stock': -quantity
+        }
+      },
+      { new: true }
+    );
+  }
+  
+  async getLowStockVariants(threshold: number = 5) {
+    return this._model.aggregate([
+      { $unwind: '$variants' },
+      {
+        $match: {
+          'variants.stock': { $lte: threshold },
+          'variants.isAvailable': true,
+          isActive: true
+        }
+      },
+      {
+        $project: {
+          productId: 1,
+          name: 1,
+          'variant.sku': '$variants.sku',
+          'variant.karat': '$variants.karat',
+          'variant.stoneType': '$variants.stoneType',
+          'variant.stock': '$variants.stock',
+          'variant.price': '$variants.price'
+        }
+      },
+      { $sort: { 'variant.stock': 1 } }
+    ]);
+  }
+
+  async bulkUpdateVariants(
+    productId: string, 
+    variants: Array<{
+      sku: string;
+      stock?: number;
+      price?: number;
+      isAvailable?: boolean;
+    }>
+  ) {
+    const bulkOps = variants.map(variant => {
+      const updateFields: any = {};
+      if (variant.stock !== undefined) updateFields['variants.$.stock'] = variant.stock;
+      if (variant.price !== undefined) updateFields['variants.$.price'] = variant.price;
+      if (variant.isAvailable !== undefined) updateFields['variants.$.isAvailable'] = variant.isAvailable;
+
+      return {
+        updateOne: {
+          filter: {
+            _id: productId,
+            'variants.sku': variant.sku
+          },
+          update: {
+            $set: updateFields
+          }
+        }
+      };
+    });
+
+    return this._model.bulkWrite(bulkOps);
   }
 }
 

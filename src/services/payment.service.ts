@@ -63,18 +63,28 @@ class PaymentService {
         private readonly _orderRepository: OrderRepository
     ) {}
 
+    /**
+     * Initiate payment for an order (supports new variant-based orders)
+     */
     async initiatePayment(params: InitiatePaymentParams) {
         const { orderId, user, method, notes } = params;
 
+        // Get order (now supports variant structure)
         const order = await orderService.getOrderById(orderId);
-        if(!order) throw new NotFoundError('Order not found');
+        if (!order) throw new NotFoundError('Order not found');
 
-        if(order.user.toString() !== user) throw new BadRequestError('Order does not belong to user');
+        if (order.user.toString() !== user) {
+            throw new BadRequestError('Order does not belong to user');
+        }
 
+        // Check if payment already exists
         const existingPayment = await this._paymentRepository.getPaymentByOrderId(orderId);
-        if(existingPayment) throw new BadRequestError('Payment already initiated for this order');
+        if (existingPayment && existingPayment.status === IPaymentStatus.CAPTURED) {
+            throw new BadRequestError('Payment already completed for this order');
+        }
 
-        if(method === IPaymentMethod.COD){
+        // Handle COD payment
+        if (method === IPaymentMethod.COD) {
             const payment = await this._paymentRepository.createPayment({
                 orderId,
                 orderNumber: order.orderNumber,
@@ -82,39 +92,70 @@ class PaymentService {
                 amount: order.total,
                 currency: 'INR',
                 method: IPaymentMethod.COD,
-                notes
+                notes: {
+                    ...notes,
+                    // Include variant information for tracking
+                    variants: order.items.map(item => ({
+                        productId: item.productId,
+                        sku: item.sku,
+                        karat: item.karat,
+                        stoneType: item.stoneType,
+                        quantity: item.quantity
+                    }))
+                }
             });
 
-            await this._paymentRepository.markPaymentAsCaptured(payment._id.toString());
-            
+            // COD is marked as captured immediately but will be confirmed on delivery
+            // Update order status to processing
             await orderService.updateOrderStatus(orderId, IOrderStatus.PROCESSING);
 
             return { payment };
         }
 
+        // Handle Razorpay payment
         const amountInPaise = Math.round(order.total * 100);
 
         const razorpayOrder = await razorpayService.createOrder(
             orderId,
             amountInPaise, 
             'INR',
-            { ...notes, orderId, userId: user }
+            { 
+                ...notes, 
+                orderId, 
+                userId: user,
+                // Include variant information in Razorpay notes
+                variants: order.items.map(item => ({
+                    productId: item.productId,
+                    sku: item.sku,
+                    karat: item.karat,
+                    stoneType: item.stoneType
+                }))
+            }
         );
 
-        const payment = await this._paymentRepository.createPayment({
-            orderId,
-            orderNumber: order.orderNumber,
-            user,
-            amount: order.total,
-            currency: 'INR',
-            method: IPaymentMethod.RAZORPAY,
-            receipt: razorpayOrder.receipt,
-            notes: { ...notes, razorpayOrder }
-        });
+        // Create or update payment record
+        let payment;
+        if (existingPayment) {
+            payment = await this._paymentRepository.updatePayment(existingPayment._id.toString(), {
+                razorpayOrderId: razorpayOrder.id,
+                notes: { ...notes, razorpayOrder }
+            });
+        } else {
+            payment = await this._paymentRepository.createPayment({
+                orderId,
+                orderNumber: order.orderNumber,
+                user,
+                amount: order.total,
+                currency: 'INR',
+                method: IPaymentMethod.RAZORPAY,
+                receipt: razorpayOrder.receipt,
+                notes: { ...notes, razorpayOrder }
+            });
 
-        await this._paymentRepository.updatePayment(payment._id.toString(), {
-            razorpayOrderId: razorpayOrder.id
-        });
+            await this._paymentRepository.updatePayment(payment._id.toString(), {
+                razorpayOrderId: razorpayOrder.id
+            });
+        }
 
         return { 
           payment,
@@ -123,6 +164,9 @@ class PaymentService {
         };
     }
 
+    /**
+     * Handle successful payment (updated for variant-based orders)
+     */
     async handleSuccessfulPayment(
         razorpayOrderId: string, 
         razorpayPaymentId: string,
@@ -169,7 +213,7 @@ class PaymentService {
                 );
             }
 
-            // 6. Update payment record using new method
+            // 6. Update payment record
             const updatedPayment = await this._paymentRepository.markPaymentAsCaptured(
                 payment._id.toString(),
                 razorpayPaymentId,
@@ -202,17 +246,14 @@ class PaymentService {
             );
             if (!orderDetails) throw new InternalServerError('Order not found');
 
-            // 9. Handle stock reduction
+            // 9. Handle stock reduction for VARIANTS (NEW)
             try {
-                const orderItems = orderDetails.items
-                    .filter(item => item.size) // Only process items with size
-                    .map(item => ({
-                        productId: item.product.toString(),
-                        colorName: item.color.colorName,
-                        size: item.size!,
-                        quantity: item.quantity,
-                        productName: item.productName
-                    }));
+                const orderItems = orderDetails.items.map(item => ({
+                    productId: item.product.toString(),
+                    sku: item.sku,
+                    karat: item.karat,
+                    quantity: item.quantity
+                }));
 
                 if (orderItems.length > 0) {
                     await productService.reduceStockForOrder(orderItems);
@@ -225,6 +266,8 @@ class PaymentService {
                     error: stockError.message,
                     timestamp: new Date().toISOString()
                 });
+                // Don't throw error - payment is already captured
+                // Log for manual stock adjustment
             }
 
             // 10. Get user details
@@ -233,7 +276,7 @@ class PaymentService {
             );
             if (!user) throw new NotFoundError('User not found');
 
-            // 11. Prepare email data with color information
+            // 11. Prepare email data with VARIANT information (NEW)
             const emailData = {
                 firstName: user.firstName,
                 lastName: user.lastName,
@@ -251,11 +294,16 @@ class PaymentService {
                 },
                 items: orderDetails.items.map(item => ({
                     productName: item.productName,
-                    productCode: item.productCode,
+                    productId: item.productId,
+                    sku: item.sku,
+                    karat: item.karat,
+                    stoneType: item.stoneType,
                     quantity: item.quantity,
-                    size: item.size?.toUpperCase() || 'N/A',
-                    color: item.color.colorName,
+                    // Optional customizations
+                    size: item.selectedSize?.toUpperCase() || 'N/A',
+                    color: item.selectedColor?.name || 'Default',
                     priceAtPurchase: item.priceAtPurchase,
+                    grossWeight: item.grossWeight,
                     itemTotal: item.itemTotal
                 })),
                 pricing: {
@@ -285,17 +333,20 @@ class PaymentService {
         }
     }
 
+    /**
+     * Handle failed payment
+     */
     async handleFailedPayment(razorpayOrderId: string, razorpayPaymentId: string, failureReason?: string) {
       const payment = await this._paymentRepository.getPaymentByRazorpayOrderId(razorpayOrderId);
       if (!payment) throw new NotFoundError('Payment not found');
 
-      // Update payment status using new method
+      // Update payment status
       const updatedPayment = await this._paymentRepository.markPaymentAsFailed(
           payment._id.toString(),
           failureReason
       );
 
-      // Also update razorpay payment ID if provided
+      // Update razorpay payment ID if provided
       if (razorpayPaymentId) {
           await this._paymentRepository.updatePayment(payment._id.toString(), {
               razorpayPaymentId
@@ -308,6 +359,9 @@ class PaymentService {
       return updatedPayment;
     }
 
+    /**
+     * Initiate refund
+     */
     async initiateRefund(params: RefundPaymentParams) {
       const { paymentId, amount, reason, razorpayRefundId } = params;
       
@@ -334,6 +388,9 @@ class PaymentService {
       return updatedPayment;
     }
 
+    /**
+     * Process refund
+     */
     async processRefund(params: ProcessRefundParams) {
         const { paymentId, refundId, status, razorpayRefundId } = params;
         
@@ -344,48 +401,83 @@ class PaymentService {
             processedAt: status === 'processed' ? new Date() : undefined
         });
 
-        // Update razorpay refund ID if provided
-        if (razorpayRefundId && status === 'processed') {
-            // You might want to add a method to update specific refund's razorpay ID
-            // For now, this is handled in the updateRefundStatus method
+        return updatedPayment;
+    }
+
+    /**
+     * Confirm COD payment (NEW - for delivery confirmation)
+     */
+    async confirmCODPayment(orderId: string, collectedAmount: number, notes?: any) {
+        const payment = await this._paymentRepository.getPaymentByOrderId(orderId);
+        if (!payment) {
+            throw new NotFoundError('Payment record not found');
         }
+
+        if (payment.method !== IPaymentMethod.COD) {
+            throw new BadRequestError('This is not a COD payment');
+        }
+
+        if (payment.status === IPaymentStatus.CAPTURED) {
+            throw new BadRequestError('COD payment already confirmed');
+        }
+
+        // Verify collected amount matches
+        if (collectedAmount !== payment.amount) {
+            console.warn(
+                `COD amount mismatch. Expected: ${payment.amount}, Collected: ${collectedAmount}`
+            );
+        }
+
+        // Mark as captured
+        const updatedPayment = await this._paymentRepository.markPaymentAsCaptured(
+            payment._id.toString(),
+            undefined,
+            { collectedAmount, confirmedAt: new Date(), ...notes }
+        );
 
         return updatedPayment;
     }
 
-    async getPaymentDetails(paymentId: string, userId: string) {
+    /**
+     * Get pending COD payments (NEW)
+     */
+    async getPendingCODPayments(page: number = 1, limit: number = 10) {
+        return this._paymentRepository.getPaymentsByMethod(IPaymentMethod.COD, page, limit);
+    }
+
+    async getPaymentDetails(paymentId: string, userId?: string) {
         const payment = await this._paymentRepository.getPaymentById(paymentId);
         if (!payment) {
             throw new NotFoundError('Payment not found');
         }
 
-        if (payment.user.toString() !== userId) {
+        if (userId && payment.user.toString() !== userId) {
             throw new BadRequestError('Payment does not belong to user');
         }
 
         return payment;
     }
 
-    async getPaymentByOrderId(orderId: string, userId: string) {
+    async getPaymentByOrderId(orderId: string, userId?: string) {
         const payment = await this._paymentRepository.getPaymentByOrderId(orderId);
         if (!payment) {
             throw new NotFoundError('Payment not found');
         }
 
-        if (payment.user.toString() !== userId) {
+        if (userId && payment.user.toString() !== userId) {
             throw new BadRequestError('Payment does not belong to user');
         }
 
         return payment;
     }
 
-    async getPaymentByOrderNumber(orderNumber: string, userId: string) {
+    async getPaymentByOrderNumber(orderNumber: string, userId?: string) {
         const payment = await this._paymentRepository.getPaymentByOrderNumber(orderNumber);
         if (!payment) {
             throw new NotFoundError('Payment not found');
         }
 
-        if (payment.user.toString() !== userId) {
+        if (userId && payment.user.toString() !== userId) {
             throw new BadRequestError('Payment does not belong to user');
         }
 
@@ -432,7 +524,7 @@ class PaymentService {
 
     async verifyPayment(razorpayOrderId: string, razorpayPaymentId: string, razorpaySignature: string) {
         try {
-            // Verify signature
+            // Verify signature using razorpayService
             const isValid = await razorpayService.verifyPaymentSignature(
                 razorpayOrderId, 
                 razorpayPaymentId, 

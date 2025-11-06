@@ -6,6 +6,8 @@ import { IOrderStatus } from "../models/order.model";
 import cartService from "./cart.service";
 import productService from "./product.service";
 import discountService from "./discount.service";
+import voucherService from "./voucher.service";
+import giftcardService from "./giftcard.service";
 
 export interface GetAllOrdersOptions {
   page?: number;
@@ -51,8 +53,11 @@ export interface OrderSummary {
   status: string;
 }
 
-export interface ColorSalesStats {
-  _id: string;
+export interface VariantSalesStats {
+  _id: {
+    karat: number;
+    stoneType: string;
+  };
   totalQuantity: number;
   totalRevenue: number;
   orderCount: number;
@@ -63,61 +68,92 @@ class OrderService {
 
   async createOrder(input: CreateOrderInput): Promise<OrderSummary> {
     const { userId, shippingAddress, billingAddress, paymentMethod, notes } = input;
+    
     const cartDetails = await cartService.getCartWithDetails(userId);
-    if (!cartDetails.items.length) throw new BadRequestError('Cart is empty')
+    if (!cartDetails.items.length) throw new BadRequestError('Cart is empty');
+    
     await this.validateStockAvailability(cartDetails.items);
+    
     const orderNumber = await this.generateOrderNumber();
     
-    // Totals
     const subtotal = cartDetails.totals.subtotal;
     const totalDiscountAmount = cartDetails.totals.discountAmount;
     const shippingCharge = this.calculateShippingCharge(subtotal);
     const taxAmount = this.calculateTax(subtotal - totalDiscountAmount + shippingCharge);
     const total = parseFloat((subtotal - totalDiscountAmount + shippingCharge + taxAmount).toFixed(2));
     
-    // order items with color and selectedImage support
-    const orderItems = cartDetails.items.map(item => {
-      const colors = (item.product as any).colors || [];
-      const colorVariant = colors.find((c: any) => c.colorName === item.color.colorName);
-      const productImage = colorVariant?.images?.[0] || item.selectedImage || '';
-      
-      return {
-        product: item.product._id,
-        productName: item.product.name,
-        productCode: '', 
-        productImage: productImage,
-        quantity: item.quantity,
-        size: item.size,
-        color: {
-          colorName: item.color.colorName,
-          colorHex: item.color.colorHex
-        },
-        selectedImage: item.selectedImage,
-        priceAtPurchase: item.product.price,
-        itemTotal: item.itemTotal
-      };
-    });
-    
-    for (const orderItem of orderItems) {
-      const product = await productService.getProductById(orderItem.product);
-      if (product) { orderItem.productCode = product.code }
-    }
-
-    // ===== ADD THIS SECTION: Mark discounts as used BEFORE creating order =====
-    if (cartDetails.cart.appliedCoupon?.code) {
-        await discountService.markDiscountAsUsed(
-            cartDetails.cart.appliedCoupon.code, 
-            userId
+    const orderItems = await Promise.all(
+      cartDetails.items.map(async (item) => {
+        const product = await productService.getProductById(item.product._id);
+        if (!product) throw new NotFoundError(`Product not found: ${item.product._id}`);
+        
+        const variant = product.variants.find(
+          v => v.karat === item.karat && v.sku === item.sku
         );
-    }
+        
+        if (!variant) {
+          throw new NotFoundError(`Variant not found for SKU: ${item.sku}`);
+        }
+        
+        let selectedColor;
+        let selectedSize;
+        
+        if (product.customizationOptions?.hasColorOptions) {
+          const matchedColor = product.customizationOptions.colors.find(
+            c => c.imageUrls?.some(img => img.url === item.selectedImage)
+          );
+          if (matchedColor) {
+            selectedColor = {
+              name: matchedColor.name,
+              hexCode: matchedColor.hexCode
+            };
+          }
+        }
+        
+        return {
+          product: item.product._id,
+          productName: product.name,
+          productId: product.productId,
+          productImage: item.selectedImage,
+          quantity: item.quantity,
+          karat: item.karat,
+          stoneType: variant.stoneType,
+          sku: item.sku,
+          selectedColor,
+          selectedSize, // Can be extended based on your cart implementation
+          selectedImage: item.selectedImage,
+          priceAtPurchase: item.price,
+          grossWeight: variant.grossWeight,
+          itemTotal: item.price * item.quantity
+        };
+      })
+    );
 
-    if (cartDetails.cart.appliedVoucher?.code) {
-        await discountService.markDiscountAsUsed(
-            cartDetails.cart.appliedVoucher.code, 
-            userId
-        );
-    }
-    // ===== END OF NEW SECTION =====
+    // ===== SAFE MARKING OF DISCOUNTS/VOUCHERS/GIFT CARDS =====
+  // Handle coupon (discount code)
+  if (cartDetails.cart.appliedCoupon?.code) {
+    await this.safelyMarkDiscountAsUsed(
+      cartDetails.cart.appliedCoupon.code, 
+      userId
+    );
+  }
+
+  // Handle voucher
+  if (cartDetails.cart.appliedVoucher?.code) {
+    await this.safelyMarkVoucherAsUsed(
+      cartDetails.cart.appliedVoucher.code, 
+      userId
+    );
+  }
+
+  // Handle gift card
+  if (cartDetails.cart.appliedGiftCard?.code) {
+    await this.safelyMarkGiftCardAsUsed(
+      cartDetails.cart.appliedGiftCard.code,
+      userId,
+      cartDetails.cart.appliedGiftCard.redeemedAmount || 0
+    );
+  }
     
     const orderParams: CreateOrderParams = {
       orderNumber,
@@ -131,10 +167,15 @@ class OrderService {
         discountId: String(cartDetails.cart.appliedCoupon.discountId),
         discountAmount: cartDetails.cart.appliedCoupon.discountAmount
       } : undefined,
-      appliedVoucher: cartDetails.cart.appliedVoucher?.discountId ? {
+      appliedVoucher: cartDetails.cart.appliedVoucher?.voucherId ? {
         code: cartDetails.cart.appliedVoucher.code,
-        discountId: String(cartDetails.cart.appliedVoucher.discountId),
+        discountId: String(cartDetails.cart.appliedVoucher.voucherId),
         discountAmount: cartDetails.cart.appliedVoucher.discountAmount
+      } : undefined,
+      appliedGiftCard: cartDetails.cart.appliedGiftCard?.giftCardId ? {
+        code: cartDetails.cart.appliedGiftCard.code,
+        giftCardId: String(cartDetails.cart.appliedGiftCard.giftCardId),
+        redeemedAmount: cartDetails.cart.appliedGiftCard.redeemedAmount
       } : undefined,
       totalDiscountAmount,
       shippingCharge,
@@ -145,9 +186,12 @@ class OrderService {
     };
     
     const order = await this._orderRepository.createOrder(orderParams);
-    if (!order) throw new InternalServerError('Failed to create order')
+    if (!order) throw new InternalServerError('Failed to create order');
       
+    // Reserve stock for variants
     await this.reserveStock(cartDetails.items);
+    
+    // Clear cart
     await cartService.clearCartItems(userId);
     
     return {
@@ -157,29 +201,26 @@ class OrderService {
       itemCount: order.items.length,
       status: order.status
     };
-}
+  }
 
   async getOrderById(orderId: string) {
     const order = await this._orderRepository.getOrderById(orderId);
     if (!order) throw new NotFoundError('Order not found');
-  
     return order;
   }
 
   async getOrderByOrderNumber(orderNumber: string) {
     const order = await this._orderRepository.getOrderByOrderNumber(orderNumber);
-    if (!order) throw new NotFoundError('Order not found')
-
+    if (!order) throw new NotFoundError('Order not found');
     return order;
   }
 
-  async getUserOrders( userId: string, page: number = 1, limit: number = 10, status?: IOrderStatus ) {
+  async getUserOrders(userId: string, page: number = 1, limit: number = 10, status?: IOrderStatus) {
     return this._orderRepository.getOrdersByUser(userId, page, limit, status);
   }
 
   async updateOrderStatus(orderId: string, status: IOrderStatus) {
     const order = await this.getOrderById(orderId);
-    
     this.validateStatusTransition(order.status, status);
 
     const updatedOrder = await this._orderRepository.updateOrderStatus(orderId, status);
@@ -188,18 +229,16 @@ class OrderService {
     }
 
     await this.handleStatusUpdate(updatedOrder, status);
-
     return updatedOrder;
   }
 
   async updateOrder(orderId: string, updateData: UpdateOrderParams) {
-    const order = await this.getOrderById(orderId);
+    await this.getOrderById(orderId);
     
     const updatedOrder = await this._orderRepository.updateOrder(orderId, updateData);
     if (!updatedOrder) {
       throw new InternalServerError('Failed to update order');
     }
-
     return updatedOrder;
   }
 
@@ -215,8 +254,9 @@ class OrderService {
     }
 
     const cancelledOrder = await this._orderRepository.cancelOrder(orderId, reason);
-    if (!cancelledOrder) throw new InternalServerError('Failed to cancel order')
+    if (!cancelledOrder) throw new InternalServerError('Failed to cancel order');
 
+    // Restore stock for all variants
     await this.restoreStock(order.items);
 
     return cancelledOrder;
@@ -239,7 +279,6 @@ class OrderService {
     }
 
     await this.restoreStock(order.items);
-
     return returnedOrder;
   }
 
@@ -251,14 +290,28 @@ class OrderService {
     return this._orderRepository.getOrderStats(userId);
   }
 
-  async getOrdersByColor(colorName: string, page: number = 1, limit: number = 10) {
-    if (!colorName.trim()) {
-      throw new BadRequestError('Color name is required');
+  async getOrdersByKarat(karat: number, page: number = 1, limit: number = 10) {
+    if (![9, 14, 18].includes(karat)) {
+      throw new BadRequestError('Invalid karat value. Must be 9, 14, or 18');
     }
-    return this._orderRepository.getOrdersByColor(colorName, page, limit);
+    return this._orderRepository.getOrdersByKarat(karat, page, limit);
   }
 
-  async getOrdersByProductAndColor( productId: string, colorName?: string, size?: string, page: number = 1, limit: number = 10 ) {
+  async getOrdersByStoneType(stoneType: string, page: number = 1, limit: number = 10) {
+    const validStoneTypes = ['regular_diamond', 'gemstone', 'colored_diamond'];
+    if (!validStoneTypes.includes(stoneType)) {
+      throw new BadRequestError('Invalid stone type');
+    }
+    return this._orderRepository.getOrdersByStoneType(stoneType, page, limit);
+  }
+
+  async getOrdersByProductAndVariant(
+    productId: string, 
+    karat?: number, 
+    stoneType?: string,
+    page: number = 1, 
+    limit: number = 10
+  ) {
     if (!productId) {
       throw new BadRequestError('Product ID is required');
     }
@@ -268,54 +321,53 @@ class OrderService {
       throw new NotFoundError('Product not found');
     }
 
-    return this._orderRepository.getOrdersByProductAndColor(
+    return this._orderRepository.getOrdersByProductAndVariant(
       productId,
-      colorName,
-      size,
+      karat,
+      stoneType,
       page,
       limit
     );
   }
 
-  async getColorSalesStats(startDate?: Date, endDate?: Date): Promise<ColorSalesStats[]> {
+  async getVariantSalesStats(startDate?: Date, endDate?: Date): Promise<VariantSalesStats[]> {
     if (startDate && endDate && startDate > endDate) {
       throw new BadRequestError('Start date cannot be after end date');
     }
-
-    return this._orderRepository.getColorSalesStats(startDate, endDate);
+    return this._orderRepository.getVariantSalesStats(startDate, endDate);
   }
 
-  async getTopSellingColors(limit: number = 10, startDate?: Date, endDate?: Date) {
+  async getTopSellingVariants(limit: number = 10, startDate?: Date, endDate?: Date) {
     if (limit < 1 || limit > 100) {
       throw new BadRequestError('Limit must be between 1 and 100');
     }
 
-    const colorStats = await this.getColorSalesStats(startDate, endDate);
-    return colorStats.slice(0, limit);
+    const variantStats = await this.getVariantSalesStats(startDate, endDate);
+    return variantStats.slice(0, limit);
   }
 
   async getAllOrders(options: GetAllOrdersOptions = {}) {
     const { 
-        page = 1, 
-        limit = 10, 
-        status, 
-        sortBy = '-createdAt',
-        startDate,
-        endDate,
-        searchTerm
+      page = 1, 
+      limit = 10, 
+      status, 
+      sortBy = '-createdAt',
+      startDate,
+      endDate,
+      searchTerm
     } = options;
 
     if (page < 1) throw new BadRequestError('Page must be greater than 0');
     if (limit < 1 || limit > 100) throw new BadRequestError('Limit must be between 1 and 100');
 
     return this._orderRepository.getAllOrders({
-        page,
-        limit,
-        status,
-        sortBy,
-        startDate,
-        endDate,
-        searchTerm
+      page,
+      limit,
+      status,
+      sortBy,
+      startDate,
+      endDate,
+      searchTerm
     });
   }
 
@@ -337,61 +389,65 @@ class OrderService {
     for (const item of cartItems) {
       const product = await productService.getProductById(item.product._id);
       if (!product) {
-        throw new NotFoundError(`Product not found: ${item.product.name}`);
+        throw new NotFoundError(`Product not found: ${item.product.name || item.product._id}`);
       }
 
-      const colorVariant = product.colors.find(c => c.colorName === item.color.colorName);
-      if (!colorVariant) {
-        throw new NotFoundError(`Color variant not found: ${item.color.colorName} for ${item.product.name}`);
+      // Find the variant by karat and SKU
+      const variant = product.variants.find(
+        v => v.karat === item.karat && v.sku === item.sku
+      );
+
+      if (!variant) {
+        throw new NotFoundError(`Variant not found for SKU: ${item.sku}`);
       }
 
-      if (item.size) {
-        const sizeStock = colorVariant.sizeStock.find(s => s.size === item.size);
-        if (!sizeStock || sizeStock.stock < item.quantity) {
-          throw new BadRequestError(
-            `Insufficient stock for ${item.product.name} in color ${item.color.colorName}, size ${item.size}. Available: ${sizeStock?.stock || 0}, Required: ${item.quantity}`
-          );
-        }
+      if (!variant.isAvailable) {
+        throw new BadRequestError(
+          `Variant ${item.sku} is not available for ${product.name}`
+        );
+      }
+
+      if (variant.stock < item.quantity) {
+        throw new BadRequestError(
+          `Insufficient stock for ${product.name} (SKU: ${item.sku}). Available: ${variant.stock}, Required: ${item.quantity}`
+        );
       }
     }
   }
 
   private async reserveStock(cartItems: any[]) {
     const orderItems = cartItems.map(item => ({
-        productId: item.product._id,
-        colorName: item.color.colorName,
-        size: item.size,
-        quantity: item.quantity,
-        productName: item.product.name
+      productId: item.product._id,
+      sku: item.sku,
+      karat: item.karat,
+      quantity: item.quantity
     }));
 
     try {
-        await productService.reduceStockForOrderWithColor(orderItems);
+      await productService.reduceStockForOrder(orderItems);
     } catch (error: any) {
-        throw new BadRequestError(`Failed to reserve stock: ${error.message}`);
+      throw new BadRequestError(`Failed to reserve stock: ${error.message}`);
     }
   }
 
   private async restoreStock(orderItems: any[]) {
     const stockItems = orderItems.map(item => ({
-        productId: item.product.toString(),
-        colorName: item.color.colorName,
-        size: item.size,
-        quantity: item.quantity
+      productId: item.product.toString(),
+      sku: item.sku,
+      karat: item.karat,
+      quantity: item.quantity
     }));
 
     try {
-        // Restore stock for color-size combinations
-        for (const item of stockItems) {
-            await productService.updateProductStockWithColor({
-                productId: item.productId,
-                colorName: item.colorName,
-                size: item.size,
-                quantity: item.quantity 
-            });
-        }
+      for (const item of stockItems) {
+        await productService.updateProductStockByVariant({
+          productId: item.productId,
+          sku: item.sku,
+          quantity: item.quantity 
+        });
+      }
     } catch (error) {
-        console.error('Failed to restore stock:', error);
+      console.error('Failed to restore stock:', error);
     }
   }
 
@@ -417,6 +473,51 @@ class OrderService {
     return [IOrderStatus.PENDING, IOrderStatus.PROCESSING].includes(status);
   }
 
+  private async safelyMarkDiscountAsUsed(code: string, userId: string) {
+    try {
+      // Check if discount exists
+      const discount = await discountService.getDiscountByCode(code);
+      if (discount) {
+        await discountService.markDiscountAsUsed(code, userId);
+      }
+    } catch (error: any) {
+      // If discount not found, it might be a voucher or gift card, so we ignore
+      if (error.statusCode === 404 || error.message?.includes('not found')) {
+        console.log(`Discount code ${code} not found, skipping...`);
+        return;
+      }
+      // Re-throw other errors (like "already used", "expired", etc.)
+      throw error;
+    }
+  }
+
+  private async safelyMarkVoucherAsUsed(code: string, userId: string) {
+    try {
+      const voucher = await voucherService.getVoucherByCode(code);
+      if (voucher) {
+        await voucherService.markVoucherAsUsed(code, userId);
+      }
+    } catch (error: any) {
+      if (error.statusCode === 404 || error.message?.includes('not found')) {
+        console.log(`Voucher code ${code} not found, skipping...`);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async safelyMarkGiftCardAsUsed(code: string, userId: string, amount: number) {
+    try {
+      const giftCard = await giftcardService.getGiftCardByCode(code);
+    } catch (error: any) {
+      if (error.statusCode === 404 || error.message?.includes('not found')) {
+        console.log(`Gift card code ${code} not found, skipping...`);
+        return;
+      }
+      throw error;
+    }
+  }
+
   private async handleStatusUpdate(order: any, newStatus: IOrderStatus) {
     switch (newStatus) {
       case IOrderStatus.PROCESSING:
@@ -434,10 +535,6 @@ class OrderService {
             trackingNumber
           });
         }
-        break;
-      
-      case IOrderStatus.CANCELLED:
-      case IOrderStatus.RETURNED:
         break;
     }
   }

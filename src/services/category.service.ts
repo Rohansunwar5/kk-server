@@ -48,19 +48,20 @@ class CategoryService {
 
   async updateCategory(categoryId: string, params: IUpdateCategoryParams) {
     const category = await this._categoryRepository.getCategoryById(categoryId);
-    
+
     if (!category) {
       throw new NotFoundError('Category not found');
     }
 
     const updatedCategory = await this._categoryRepository.updateCategoryById(categoryId, params);
-    
+
     if (!updatedCategory) {
       throw new InternalServerError('Failed to update category');
     }
 
     return updatedCategory;
   }
+
 
   async deleteCategory(categoryId: string) {
     const category = await this._categoryRepository.getCategoryById(categoryId);
@@ -95,66 +96,57 @@ class CategoryService {
     return { message: 'Category permanently deleted', deleteResponse };
   }
 
-  async mapProductsToCategories() {
-    const categories = await this._categoryRepository.getAllCategories();
-    const products = await this._productRepository.getAllProducts();
+  // async mapProductsToCategories() {
+  //   const categories = await this._categoryRepository.getAllCategories();
+  //   const products = await this._productRepository.getAllProducts();
 
-    if (!categories || !products) {
-      throw new InternalServerError('Failed to fetch data');
-    }
+  //   if (!categories || !products) {
+  //     throw new InternalServerError('Failed to fetch data');
+  //   }
 
-    const updatePromises = categories.map(async (category) => {
-      // Find products that belong to this category
-      const productsInCategory = products.filter((product) =>
-        product.categoryIds.includes(category.categoryId)
-      );
+  //   const updatePromises = categories.map(async (category) => {
+  //     // Find products that belong to this category
+  //     const productsInCategory = products.filter((product) =>
+  //       product.categoryIds.includes(category.categoryId)
+  //     );
 
-      // Extract product IDs
-      const productIds = productsInCategory.map((product) => product.productId);
+  //     // Extract product IDs
+  //     const productIds = productsInCategory.map((product) => product.productId);
 
-      // Update category with product IDs
-      if (productIds.length > 0) {
-        return await this._categoryRepository.updateCategoryByCategoryId(
-          category.categoryId,
-          { productIds }
-        );
-      }
+  //     // Update category with product IDs
+  //     if (productIds.length > 0) {
+  //       return await this._categoryRepository.updateCategoryByCategoryId(
+  //         category.categoryId,
+  //         { productIds }
+  //       );
+  //     }
 
-      return category;
-    });
+  //     return category;
+  //   });
 
-    const updatedCategories = await Promise.all(updatePromises);
+  //   const updatedCategories = await Promise.all(updatePromises);
 
-    return {
-      message: 'Categories mapped successfully',
-      categories: updatedCategories.filter(Boolean),
-    };
-  }
+  //   return {
+  //     message: 'Categories mapped successfully',
+  //     categories: updatedCategories.filter(Boolean),
+  //   };
+  // }
 
   async addProductToCategory(categoryId: string, productId: string) {
-    const category = await this._categoryRepository.getCategoryByCategoryId(categoryId);
-    
-    if (!category) {
-      throw new NotFoundError('Category not found');
-    }
+    const category = await this._categoryRepository.getCategoryById(categoryId);
+    if (!category) throw new NotFoundError('Category not found');
 
-    const product = await this._productRepository.getProductByProductId(productId);
+    const product = await this._productRepository.getProductById(productId);
+    if (!product) throw new NotFoundError('Product not found');
     
-    if (!product) {
-      throw new NotFoundError('Product not found');
-    }
-
     const updatedCategory = await this._categoryRepository.addProductToCategory(categoryId, productId);
-    
-    if (!updatedCategory) {
-      throw new InternalServerError('Failed to add product to category');
-    }
+    if (!updatedCategory) throw new InternalServerError('Failed to add product to category');
 
     return updatedCategory;
   }
 
   async removeProductFromCategory(categoryId: string, productId: string) {
-    const category = await this._categoryRepository.getCategoryByCategoryId(categoryId);
+    const category = await this._categoryRepository.getCategoryById(categoryId);
     
     if (!category) {
       throw new NotFoundError('Category not found');

@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
 import subCategoryService from '../services/subcategory.service';
-import { UnauthorizedError } from '../errors/unauthorized.error';
 import { BadRequestError } from '../errors/bad-request.error';
 
 export const getAllSubCategories = async (req: Request, res: Response, next: NextFunction) => {
@@ -35,26 +34,16 @@ export const getSubCategoriesByParentCategoryId = async (
 };
 
 export const createSubCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const {
-    subCategoryId,
-    name,
-    parentCategoryId,
-    productIds,
-    bannerIds,
-    description,
-    isActive,
-  } = req.body;
+  const { name, parentCategoryId, imageUrls, description, isActive } = req.body;
 
-  if (!subCategoryId || !name || !parentCategoryId) {
-    throw new BadRequestError('SubCategory ID, name, and parent category ID are required');
+  if (!name || !parentCategoryId) {
+    throw new BadRequestError('Name and parent category ID are required');
   }
 
   const response = await subCategoryService.createSubCategory({
-    subCategoryId,
     name,
     parentCategoryId,
-    productIds,
-    bannerIds,
+    imageUrls,
     description,
     isActive,
   });
@@ -63,18 +52,17 @@ export const createSubCategory = async (req: Request, res: Response, next: NextF
 };
 
 export const updateSubCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { subCategoryId } = req.params;
-  const { name, parentCategoryId, productIds, bannerIds, description, isActive } = req.body;
+  const { id } = req.params;
+  const { name, parentCategoryId, imageUrls, description, isActive } = req.body;
 
-  if (!subCategoryId) {
+  if (!id) {
     throw new BadRequestError('SubCategory ID is required');
   }
 
-  const response = await subCategoryService.updateSubCategory(subCategoryId, {
+  const response = await subCategoryService.updateSubCategory(id, {
     name,
     parentCategoryId,
-    productIds,
-    bannerIds,
+    imageUrls,
     description,
     isActive,
   });
@@ -83,60 +71,23 @@ export const updateSubCategory = async (req: Request, res: Response, next: NextF
 };
 
 export const deleteSubCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { subCategoryId } = req.params;
+  const { id } = req.params;
 
-  if (!subCategoryId) {
+  if (!id) {
     throw new BadRequestError('SubCategory ID is required');
   }
 
-  const response = await subCategoryService.deleteSubCategory(subCategoryId);
+  const response = await subCategoryService.deleteSubCategory(id);
   next(response);
 };
 
 export const hardDeleteSubCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { subCategoryId } = req.params;
+  const { id } = req.params;
 
-  if (!subCategoryId) {
+  if (!id) {
     throw new BadRequestError('SubCategory ID is required');
   }
 
-  const response = await subCategoryService.hardDeleteSubCategory(subCategoryId);
-  next(response);
-};
-
-export const addProductToSubCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { subCategoryId } = req.params;
-  const { productId } = req.body;
-
-  if (!subCategoryId || !productId) {
-    throw new BadRequestError('SubCategory ID and Product ID are required');
-  }
-
-  const response = await subCategoryService.addProductToSubCategory(subCategoryId, productId);
-  next(response);
-};
-
-export const removeProductFromSubCategory = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const { subCategoryId, productId } = req.params;
-
-  if (!subCategoryId || !productId) {
-    throw new BadRequestError('SubCategory ID and Product ID are required');
-  }
-
-  const response = await subCategoryService.removeProductFromSubCategory(subCategoryId, productId);
-  next(response);
-};
-
-export const mapProductsToSubCategories = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const response = await subCategoryService.mapProductsToSubCategories();
-
+  const response = await subCategoryService.hardDeleteSubCategory(id);
   next(response);
 };

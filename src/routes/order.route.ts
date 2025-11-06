@@ -2,27 +2,29 @@ import { Router } from "express";
 import isLoggedIn from "../middlewares/isLoggedIn.middleware";
 import { asyncHandler } from "../utils/asynchandler";
 import {  
-    getAllOrders, 
-    getOrderByIdAdmin, 
-    getOrderById,
-    getOrderStats, 
-    getUserOrders, 
-    searchOrders, 
-    updateOrderStatus,
-    createOrder,
-    cancelOrder,
-    returnOrder,
-    getOrdersByColor,
-    getOrdersByProductAndColor,
-    getColorSalesStats,
-    getTopSellingColors,
-    updatePaymentStatus,
-    addTrackingNumber
+  getAllOrders, 
+  getOrderByIdAdmin, 
+  getOrderById,
+  getOrderStats, 
+  getUserOrders, 
+  searchOrders, 
+  updateOrderStatus,
+  createOrder,
+  cancelOrder,
+  returnOrder,
+  getOrdersByKarat,
+  getOrdersByStoneType,
+  getOrdersByProductAndVariant,
+  getVariantSalesStats,
+  getTopSellingVariants,
+  updatePaymentStatus,
+  addTrackingNumber
 } from "../controllers/order.controller";
 import isAdminLoggedIn from "../middlewares/isAdminLoggedIn.middleware";
 
 const orderRouter = Router();
 
+// User routes
 orderRouter.post('/', isLoggedIn, asyncHandler(createOrder));
 orderRouter.get('/', isLoggedIn, asyncHandler(getUserOrders));
 orderRouter.get('/search', isLoggedIn, asyncHandler(searchOrders));
@@ -38,12 +40,13 @@ orderRouter.patch('/admin/:id/status', isAdminLoggedIn, asyncHandler(updateOrder
 orderRouter.patch('/admin/:id/payment-status', isAdminLoggedIn, asyncHandler(updatePaymentStatus));
 orderRouter.patch('/admin/:id/tracking', isAdminLoggedIn, asyncHandler(addTrackingNumber));
 
-// Admin routes - Analytics and reporting
-orderRouter.get('/admin/analytics/color-sales', isAdminLoggedIn, asyncHandler(getColorSalesStats));
-orderRouter.get('/admin/analytics/top-colors', isAdminLoggedIn, asyncHandler(getTopSellingColors));
+// Admin routes - Analytics and reporting (UPDATED)
+orderRouter.get('/admin/analytics/variant-sales', isAdminLoggedIn, asyncHandler(getVariantSalesStats));
+orderRouter.get('/admin/analytics/top-variants', isAdminLoggedIn, asyncHandler(getTopSellingVariants));
 
-// Admin routes - Color-based filtering
-orderRouter.get('/admin/by-color/:colorName', isAdminLoggedIn, asyncHandler(getOrdersByColor));
-orderRouter.get('/admin/by-product/:productId', isAdminLoggedIn, asyncHandler(getOrdersByProductAndColor));
+// Admin routes - Variant-based filtering (NEW/UPDATED)
+orderRouter.get('/admin/by-karat/:karat', isAdminLoggedIn, asyncHandler(getOrdersByKarat));
+orderRouter.get('/admin/by-stone-type/:stoneType', isAdminLoggedIn, asyncHandler(getOrdersByStoneType));
+orderRouter.get('/admin/by-product/:productId', isAdminLoggedIn, asyncHandler(getOrdersByProductAndVariant));
 
 export default orderRouter;
