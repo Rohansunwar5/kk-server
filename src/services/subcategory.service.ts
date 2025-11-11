@@ -158,6 +158,13 @@ class SubCategoryService {
 
     return { message: 'SubCategory permanently deleted', deleteResponse };
   }
+
+  async getSubCategoriesByCategoryId(parentCategoryId: string) {
+    const subCategories = await this._subCategoryRepository.getSubCategoriesByParentCategoryId(parentCategoryId);
+    // Optionally return 404 if no subcategories found:
+    // if (!subCategories || subCategories.length === 0) throw new NotFoundError('No subcategories found');
+    return subCategories;
+  }
 }
 
 export default new SubCategoryService(

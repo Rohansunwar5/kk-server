@@ -9,6 +9,7 @@ import {
   hardDeleteCategory,
   addProductToCategory,
   removeProductFromCategory,
+  getProductsByCategory,
 } from '../controllers/category.controller';
 import isAdminLoggedIn from '../middlewares/isAdminLoggedIn.middleware';
 
@@ -31,6 +32,10 @@ categoryRouter.delete('/:categoryId/hard',asyncHandler(hardDeleteCategory));
 // categoryRouter.post('/map-products',isAdminLoggedIn,asyncHandler(mapProductsToCategories));
 
 categoryRouter.post('/:categoryId/products', asyncHandler(addProductToCategory));
+// category.route.ts
+categoryRouter.get('/:categoryId/products', asyncHandler(getProductsByCategory));
+
+
 
 categoryRouter.delete('/:categoryId/products/:productId', asyncHandler(removeProductFromCategory));
 

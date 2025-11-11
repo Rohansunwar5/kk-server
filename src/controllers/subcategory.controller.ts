@@ -91,3 +91,9 @@ export const hardDeleteSubCategory = async (req: Request, res: Response, next: N
   const response = await subCategoryService.hardDeleteSubCategory(id);
   next(response);
 };
+
+export const getSubCategoriesByCategory = async (req: Request, res: Response, next: NextFunction) => {
+  const { categoryId } = req.params;
+  const subCategories = await subCategoryService.getSubCategoriesByCategoryId(categoryId);
+  next(subCategories);
+};

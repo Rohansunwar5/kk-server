@@ -86,7 +86,14 @@ export const addProductToCategory = async (req: Request, res: Response, next: Ne
 
 export const removeProductFromCategory = async (req: Request,res: Response,next: NextFunction) => {
   const { categoryId, productId } = req.params;
-
   const response = await categoryService.removeProductFromCategory(categoryId, productId);
+
+  next(response);
+};
+
+export const getProductsByCategory = async (req: Request, res: Response, next: NextFunction) => {
+  const { categoryId } = req.params;
+  const response = await categoryService.getProductsByCategory(categoryId);
+
   next(response);
 };

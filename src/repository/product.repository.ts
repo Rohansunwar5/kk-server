@@ -348,14 +348,7 @@ export class ProductRepository {
     );
   }
 
-  /**
-   * Decrement variant stock (atomic operation with stock check)
-   * @param productId - Product ID
-   * @param sku - Variant SKU
-   * @param quantity - Quantity to reduce
-   */
   async decrementVariantStock(productId: string, sku: string, quantity: number) {
-    // First check if sufficient stock exists
     const product = await this._model.findOne({
       _id: productId,
       'variants.sku': sku,

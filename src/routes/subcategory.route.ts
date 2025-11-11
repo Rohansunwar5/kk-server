@@ -8,6 +8,7 @@ import {
   updateSubCategory,
   deleteSubCategory,
   hardDeleteSubCategory,
+  getSubCategoriesByCategory,
 } from '../controllers/subcategory.controller';
 import isAdminLoggedIn from '../middlewares/isAdminLoggedIn.middleware';
 
@@ -23,5 +24,6 @@ subCategoryRouter.post('/', asyncHandler(createSubCategory));
 subCategoryRouter.put('/:id', asyncHandler(updateSubCategory));
 subCategoryRouter.delete('/:id', asyncHandler(deleteSubCategory));
 subCategoryRouter.delete('/:id/hard', asyncHandler(hardDeleteSubCategory));
+subCategoryRouter.get('/parent/:categoryId', asyncHandler(getSubCategoriesByCategory));
 
 export default subCategoryRouter;

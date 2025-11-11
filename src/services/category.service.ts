@@ -163,6 +163,20 @@ class CategoryService {
 
     return updatedCategory;
   }
+
+  async getProductsByCategory(categoryId: string) {
+    const category = await this._categoryRepository.getCategoryById(categoryId);
+    if (!category) throw new NotFoundError('Category not found');
+
+    // Convert category._id to ObjectId if necessary
+    const { ObjectId } = require('mongodb');
+    const categoryObjectId = typeof category._id === 'string' ? new ObjectId(category._id) : category._id;
+
+    const products = await this._productRepository.getProductsByCategoryIds([
+      categoryObjectId
+    ]);
+    return products;
+  }
 }
 
 export default new CategoryService(

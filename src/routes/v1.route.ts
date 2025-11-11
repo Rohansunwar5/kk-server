@@ -18,7 +18,7 @@ import collectionRouter from './collection.route';
 import voucherRouter from './voucher.route';
 
 const v1Router = Router();
-
+   
 v1Router.get('/', asyncHandler(helloWorld));
 v1Router.get('/health', asyncHandler(health));
 v1Router.use('/admin', adminRouter);
@@ -29,12 +29,12 @@ v1Router.use('/cart', cartRouter);
 v1Router.use('/order', orderRouter);
 v1Router.use('/category', categoryRouter);
 v1Router.use('/sub-category', subcategoryRouter);
-// v1Router.use('/payments', paymentRouter);
+v1Router.use('/payments', paymentRouter);
 v1Router.use('/discount', discountRouter);
 v1Router.use('/voucher', voucherRouter);
 // v1Router.use('/wishlist', wishlistRouter);
-// v1Router.use('/blog', blogRouter);
-// v1Router.use('/banner', bannerRouter);
-// v1Router.use('/mobile-banner', mobileBannerRouter);
+v1Router.use('/blog', blogRouter);
+v1Router.use('/banner', bannerRouter);
+v1Router.use('/mobile-banner', mobileBannerRouter);
 
 export default v1Router;

@@ -120,7 +120,7 @@ class OrderService {
           stoneType: variant.stoneType,
           sku: item.sku,
           selectedColor,
-          selectedSize, // Can be extended based on your cart implementation
+          selectedSize, 
           selectedImage: item.selectedImage,
           priceAtPurchase: item.price,
           grossWeight: variant.grossWeight,
@@ -129,79 +129,75 @@ class OrderService {
       })
     );
 
-    // ===== SAFE MARKING OF DISCOUNTS/VOUCHERS/GIFT CARDS =====
-  // Handle coupon (discount code)
-  if (cartDetails.cart.appliedCoupon?.code) {
-    await this.safelyMarkDiscountAsUsed(
-      cartDetails.cart.appliedCoupon.code, 
-      userId
-    );
-  }
+    if (cartDetails.cart.appliedCoupon?.code) {
+      await this.safelyMarkDiscountAsUsed(
+        cartDetails.cart.appliedCoupon.code, 
+        userId
+      );
+    }
 
-  // Handle voucher
-  if (cartDetails.cart.appliedVoucher?.code) {
-    await this.safelyMarkVoucherAsUsed(
-      cartDetails.cart.appliedVoucher.code, 
-      userId
-    );
-  }
+    // Handle voucher
+    if (cartDetails.cart.appliedVoucher?.code) {
+      await this.safelyMarkVoucherAsUsed(
+        cartDetails.cart.appliedVoucher.code, 
+        userId
+      );
+    }
 
-  // Handle gift card
-  if (cartDetails.cart.appliedGiftCard?.code) {
-    await this.safelyMarkGiftCardAsUsed(
-      cartDetails.cart.appliedGiftCard.code,
-      userId,
-      cartDetails.cart.appliedGiftCard.redeemedAmount || 0
-    );
-  }
-    
-    const orderParams: CreateOrderParams = {
-      orderNumber,
-      user: userId,
-      items: orderItems,
-      shippingAddress,
-      billingAddress,
-      subtotal,
-      appliedCoupon: cartDetails.cart.appliedCoupon?.discountId ? {
-        code: cartDetails.cart.appliedCoupon.code,
-        discountId: String(cartDetails.cart.appliedCoupon.discountId),
-        discountAmount: cartDetails.cart.appliedCoupon.discountAmount
-      } : undefined,
-      appliedVoucher: cartDetails.cart.appliedVoucher?.voucherId ? {
-        code: cartDetails.cart.appliedVoucher.code,
-        discountId: String(cartDetails.cart.appliedVoucher.voucherId),
-        discountAmount: cartDetails.cart.appliedVoucher.discountAmount
-      } : undefined,
-      appliedGiftCard: cartDetails.cart.appliedGiftCard?.giftCardId ? {
-        code: cartDetails.cart.appliedGiftCard.code,
-        giftCardId: String(cartDetails.cart.appliedGiftCard.giftCardId),
-        redeemedAmount: cartDetails.cart.appliedGiftCard.redeemedAmount
-      } : undefined,
-      totalDiscountAmount,
-      shippingCharge,
-      taxAmount,
-      total,
-      paymentMethod,
-      notes
-    };
-    
-    const order = await this._orderRepository.createOrder(orderParams);
-    if (!order) throw new InternalServerError('Failed to create order');
+    // Handle gift card
+    if (cartDetails.cart.appliedGiftCard?.code) {
+      await this.safelyMarkGiftCardAsUsed(
+        cartDetails.cart.appliedGiftCard.code,
+        userId,
+        cartDetails.cart.appliedGiftCard.redeemedAmount || 0
+      );
+    }
       
-    // Reserve stock for variants
-    await this.reserveStock(cartDetails.items);
-    
-    // Clear cart
-    await cartService.clearCartItems(userId);
-    
-    return {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      total: order.total,
-      itemCount: order.items.length,
-      status: order.status
-    };
-  }
+      const orderParams: CreateOrderParams = {
+        orderNumber,
+        user: userId,
+        items: orderItems,
+        shippingAddress,
+        billingAddress,
+        subtotal,
+        appliedCoupon: cartDetails.cart.appliedCoupon?.discountId ? {
+          code: cartDetails.cart.appliedCoupon.code,
+          discountId: String(cartDetails.cart.appliedCoupon.discountId),
+          discountAmount: cartDetails.cart.appliedCoupon.discountAmount
+        } : undefined,
+        appliedVoucher: cartDetails.cart.appliedVoucher?.voucherId ? {
+          code: cartDetails.cart.appliedVoucher.code,
+          discountId: String(cartDetails.cart.appliedVoucher.voucherId),
+          discountAmount: cartDetails.cart.appliedVoucher.discountAmount
+        } : undefined,
+        appliedGiftCard: cartDetails.cart.appliedGiftCard?.giftCardId ? {
+          code: cartDetails.cart.appliedGiftCard.code,
+          giftCardId: String(cartDetails.cart.appliedGiftCard.giftCardId),
+          redeemedAmount: cartDetails.cart.appliedGiftCard.redeemedAmount
+        } : undefined,
+        totalDiscountAmount,
+        shippingCharge,
+        taxAmount,
+        total,
+        paymentMethod,
+        notes
+      };
+      
+      const order = await this._orderRepository.createOrder(orderParams);
+      if (!order) throw new InternalServerError('Failed to create order');
+        
+      await this.reserveStock(cartDetails.items);
+      
+      await cartService.clearCartItems(userId);
+      
+      return {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+        itemCount: order.items.length,
+        status: order.status
+      };
+    }
 
   async getOrderById(orderId: string) {
     const order = await this._orderRepository.getOrderById(orderId);

@@ -13,16 +13,16 @@ productRouter.get('/', asyncHandler(getAllProducts));
 productRouter.get('/:id', asyncHandler(getProductById));
 productRouter.get('/by-product-id/:productId', asyncHandler(getProductByProductId));
 //admin
-productRouter.post('/', asyncHandler(createProduct));
-productRouter.put('/:id', asyncHandler(updateProduct));
-productRouter.delete('/:id', asyncHandler(deleteProduct));
-productRouter.post('/delete-multiple', asyncHandler(deleteMultipleProducts));
-productRouter.post('/map-images', asyncHandler(mapImagesToProducts));
+productRouter.post('/', isAdminLoggedIn, asyncHandler(createProduct));
+productRouter.put('/:id', isAdminLoggedIn, asyncHandler(updateProduct));
+productRouter.delete('/:id', isAdminLoggedIn, asyncHandler(deleteProduct));
+productRouter.post('/delete-multiple', isAdminLoggedIn, asyncHandler(deleteMultipleProducts));
+productRouter.post('/map-images', isAdminLoggedIn, asyncHandler(mapImagesToProducts));
 
 //price management route
-productRouter.post('/prices/update-all', asyncHandler(updateAllProductPrices));
-productRouter.post('/prices/update-by-karat', asyncHandler(updateProductPricesByKarat));
-productRouter.post('/prices/set-base', asyncHandler(setBasePrices));
+productRouter.post('/prices/update-all', isAdminLoggedIn, asyncHandler(updateAllProductPrices));
+productRouter.post('/prices/update-by-karat', isAdminLoggedIn, asyncHandler(updateProductPricesByKarat));
+productRouter.post('/prices/set-base', isAdminLoggedIn, asyncHandler(setBasePrices));
 
 //variant management
 // productRouter.post('/:productId/variants', asyncHandler());
