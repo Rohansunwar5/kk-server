@@ -10,7 +10,7 @@ import paymentRouter from './payment.route';
 import categoryRouter from './category.route';
 import adminRouter from './admin.route';
 import subcategoryRouter from './subcategory.route';
-import wishlistRouter from './wishlist.route';
+// import wishlistRouter from './wishlist.route';
 import blogRouter from './blog.route';
 import bannerRouter from './banner.route';
 import mobileBannerRouter from './mobileBanner.route';
