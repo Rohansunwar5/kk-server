@@ -5,6 +5,7 @@ import { InternalServerError } from '../errors/internal-server.error';
 import { getProductPriceDetails, KaratType } from '../utils/DiamondPriceCalculation';
 import { IProduct, IVariant, ICustomizationOptions } from '../models/product.model';
 import mongoose from 'mongoose';
+import { uploadImageToCloudinary } from '../utils/cloudinary.util';
 
 type StoneType = 'regular_diamond' | 'gemstone' | 'colored_diamond';
 
@@ -663,6 +664,24 @@ class ProductService {
     }
 
     return results;
+  }
+
+  async handleImageUploads(params: { files?: Express.Multer.File[]; existingImages?: string[] }): Promise<string[]> {
+    let imageUrls: string[] = [];
+
+    if (params.existingImages) {
+        imageUrls = Array.isArray(params.existingImages) ? params.existingImages : [params.existingImages];
+    }
+
+    if (params.files && params.files.length > 0) {
+        const uploadPromises = params.files.map((file) => uploadImageToCloudinary(file));
+        const newImageUrls = await Promise.all(uploadPromises);
+        imageUrls = [...imageUrls, ...newImageUrls];
+    }
+
+    if (imageUrls.length === 0) throw new BadRequestError('At least one product image is required');
+
+    return imageUrls;
   }
 }
 

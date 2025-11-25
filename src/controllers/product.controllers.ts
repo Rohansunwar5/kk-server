@@ -294,3 +294,13 @@ export const bulkUpdateField = async (req: Request, res: Response, next: NextFun
   
   next(response);
 };
+
+export const uploadProductImage = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.file) {
+      // no file uploaded
+      return next({ status: 400, message: 'No file uploaded' });
+    }
+
+    const imageUrls = await productService.handleImageUploads({ files: [req.file] });
+    next(imageUrls);
+};
