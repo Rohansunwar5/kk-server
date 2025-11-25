@@ -3,7 +3,6 @@ import { asyncHandler } from "../utils/asynchandler";
 import { bulkUpdateField, createProduct, deleteMultipleProducts, deleteProduct, getAllProducts, getProductById, getProductByProductId, getProducts, mapImagesToProducts, searchProducts, setBasePrices, updateAllProductPrices, updateProduct, updateProductPricesByKarat, uploadProductImage } from "../controllers/product.controllers";
 import isAdminLoggedIn from "../middlewares/isAdminLoggedIn.middleware";
 import { searchProductValidator, updateProductStockValidator } from "../middlewares/validators/auth.validator";
-import { uploadImage } from "../middlewares/multer.middleware";
 
 const productRouter = Router();
 
@@ -19,7 +18,7 @@ productRouter.delete('/:id', isAdminLoggedIn, asyncHandler(deleteProduct));
 productRouter.post('/delete-multiple', isAdminLoggedIn, asyncHandler(deleteMultipleProducts));
 productRouter.post('/map-images', isAdminLoggedIn, asyncHandler(mapImagesToProducts));
 
-productRouter.post('/upload-image', uploadImage, asyncHandler(uploadProductImage))
+productRouter.post('/upload-image', uploadProductImage, asyncHandler(uploadProductImage))
 
 //price management route
 productRouter.post('/prices/update-all', isAdminLoggedIn, asyncHandler(updateAllProductPrices));
